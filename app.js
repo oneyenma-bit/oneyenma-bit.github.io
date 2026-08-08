@@ -1203,12 +1203,13 @@ async function renderAdminPanel() {
         
         let html = '';
         data.forEach(user => {
-            const hasPass = user.messages.some(m => m.startsWith('pass:') && m !== 'pass:none') ? '✅' : '❌';
-            const hasPin = user.messages.some(m => m.startsWith('pin:')) ? '✅' : '❌';
-            const dateMsg = user.messages.find(m => m.startsWith('date:'));
+            const msgs = Array.isArray(user.messages) ? user.messages : [];
+            const hasPass = msgs.some(m => typeof m === 'string' && m.startsWith('pass:') && m !== 'pass:none') ? '✅' : '❌';
+            const hasPin = msgs.some(m => typeof m === 'string' && m.startsWith('pin:')) ? '✅' : '❌';
+            const dateMsg = msgs.find(m => typeof m === 'string' && m.startsWith('date:'));
             const dateStr = dateMsg ? dateMsg.replace('date:', '') : 'Previo a registro de fecha';
             
-            const msgGems = user.messages.find(m => m.startsWith('gems:'));
+            const msgGems = msgs.find(m => typeof m === 'string' && m.startsWith('gems:'));
             const gemsCount = msgGems ? msgGems.replace('gems:', '') : '0';
             
             html += `
@@ -2952,6 +2953,7 @@ document.addEventListener('click', () => {
         menu.style.display = 'none';
     });
     activeMsgMenuId = null;
+    activeClanMsgMenuId = null;
 });
 
 function deleteMessage(idx, mode) {
@@ -4898,15 +4900,14 @@ function renderClanChatMessages() {
     const container = document.getElementById('clan-chat-messages-container');
     if (!container) return;
     
-    // Si no hay chatRoom aún (cargando), simplemente no renderizar — no mostrar pantalla falsa
     if (!chatRoom || !chatRoom.messages || chatRoom.messages.length === 0) {
+        container.innerHTML = `<div style="padding:2rem;color:var(--text-muted);text-align:center;font-family:var(--font);font-weight:500;">No hay mensajes en el chat del clan. ¡Di hola!</div>`;
         return;
     }
     
-    container.innerHTML = chatRoom.messages.map(m => {
-        const isMe = m.sender.toLowerCase() === state.username.toLowerCase();
+    let lastSender = '';
+    container.innerHTML = chatRoom.messages.map((m, idx) => {
         const isSystem = m.sender === 'System';
-        
         if (isSystem) {
             return `
                 <div style="align-self: center; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-muted); font-size: 0.72rem; padding: 4px 10px; border-radius: 4px; max-width: 80%; text-align: center; margin: 4px 0;">
@@ -4915,15 +4916,71 @@ function renderClanChatMessages() {
             `;
         }
         
-        const bubbleBg = isMe ? 'var(--primary)' : '#262626';
-        const bubbleColor = '#fff';
-        const align = isMe ? 'flex-end' : 'flex-start';
+        const isMe = m.sender.toLowerCase() === state.username.toLowerCase();
         
+        // Comprobar si fue eliminado para mí
+        const isDeletedForMe = m.deleted_by && m.deleted_by.includes(state.username);
+        if (isDeletedForMe) return '';
+        
+        const showAvatar = !isMe && lastSender !== m.sender;
+        lastSender = m.sender;
+        
+        let bubbleContent = '';
+        if (m.deleted_for_everyone) {
+            bubbleContent = `
+                <div style="font-style: italic; color: rgba(255,255,255,0.4); font-size: 0.82rem; display: flex; align-items: center; gap: 6px; user-select: none;">
+                    <i class="fa-solid fa-ban" style="font-size: 0.72rem;"></i> Mensaje eliminado
+                </div>
+            `;
+        } else {
+            bubbleContent = `
+                ${!isMe && showAvatar ? `<span style="font-size: 0.72rem; color: #a855f7; font-weight: 800; margin-bottom: 3px; display: block; font-family: var(--font);">${m.sender}</span>` : ''}
+                <div class="msg-text-content" style="word-break: break-word; line-height: 1.4; font-size: 0.88rem; font-weight: 500;">
+                    ${m.text}
+                </div>
+                ${m.edited ? `<span style="font-size: 0.6rem; color: rgba(255,255,255,0.35); margin-top: 3px; display: block; font-weight: 600; text-align: right; user-select: none;">(editado)</span>` : ''}
+            `;
+        }
+        
+        // Menú de opciones (WhatsApp)
+        let menuHtml = '';
+        if (!m.deleted_for_everyone) {
+            menuHtml = `
+                <div class="msg-options-menu" id="clan-msg-menu-${idx}" style="display: none; position: absolute; top: 100%; ${isMe ? 'right: 0' : 'left: 0'}; z-index: 100; background: #181528; border: 1.5px solid rgba(168, 85, 247, 0.4); border-radius: 8px; padding: 4px 0; min-width: 140px; box-shadow: 0 4px 15px rgba(0,0,0,0.6);">
+                    ${isMe ? `<button onclick="startEditClanMessage(${idx})" class="msg-menu-item"><i class="fa-solid fa-pen" style="color:#a855f7;"></i> Editar mensaje</button>` : ''}
+                    <button onclick="deleteClanMessage(${idx}, 'me')" class="msg-menu-item"><i class="fa-solid fa-user-minus" style="color:#fbbf24;"></i> Eliminar para mí</button>
+                    ${isMe ? `<button onclick="deleteClanMessage(${idx}, 'everyone')" class="msg-menu-item delete-danger"><i class="fa-solid fa-trash-can"></i> Eliminar para todos</button>` : ''}
+                </div>
+            `;
+        }
+        
+        const avatarCol = !isMe ? `
+            <div style="width: 32px; display: flex; justify-content: center; align-items: flex-end; margin-right: 6px; padding-bottom: 2px;">
+                ${showAvatar ? getPlayerAvatarAndFrameHTML(m.sender, '26px') : '<div style="width:26px; height:26px;"></div>'}
+            </div>
+        ` : '';
+        
+        const bubbleStyle = isMe 
+            ? 'background: linear-gradient(135deg, rgba(168, 85, 247, 0.22) 0%, rgba(168, 85, 247, 0.08) 100%); border: 1.5px solid rgba(168, 85, 247, 0.3); border-radius: 16px 16px 0 16px; color: #fff; padding: 8px 12px; position: relative;'
+            : 'background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px 16px 16px 0; color: #fff; padding: 8px 12px; position: relative;';
+            
         return `
-            <div style="align-self: ${align}; max-width: 75%; background: ${bubbleBg}; color: ${bubbleColor}; padding: 8px 12px; border-radius: 4px; border-bottom: 2px solid rgba(0,0,0,0.15); display: flex; flex-direction: column; gap: 2px; position: relative;">
-                ${!isMe ? `<span style="font-size: 0.65rem; color: #a3e635; font-weight: bold; margin-bottom: 2px;">${m.sender}</span>` : ''}
-                <span style="font-size: 0.82rem; line-height: 1.3; font-weight: 500;">${m.text}</span>
-                <span style="font-size: 0.6rem; color: rgba(255,255,255,0.5); align-self: flex-end; margin-top: 2px;">${m.time}</span>
+            <div class="chat-message-row ${isMe ? 'msg-me' : 'msg-other'}" style="display: flex; justify-content: ${isMe ? 'flex-end' : 'flex-start'}; margin-bottom: 6px; position: relative;">
+                ${avatarCol}
+                <div style="display: flex; flex-direction: column; align-items: ${isMe ? 'flex-end' : 'flex-start'}; max-width: 75%;">
+                    <div class="chat-bubble-container" style="position: relative; display: flex; align-items: center; gap: 6px;">
+                        <div class="chat-bubble" style="${bubbleStyle}">
+                            ${bubbleContent}
+                        </div>
+                        ${!m.deleted_for_everyone ? `
+                            <button onclick="toggleClanMsgMenu(event, ${idx})" class="msg-options-btn" style="background: none; border: none; color: rgba(255,255,255,0.3); cursor: pointer; padding: 4px; border-radius: 50%; opacity: 0; transition: opacity 0.15s; display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; flex-shrink:0;">
+                                <i class="fa-solid fa-chevron-down" style="font-size: 0.65rem;"></i>
+                            </button>
+                            ${menuHtml}
+                        ` : ''}
+                    </div>
+                    <span style="font-size:0.65rem; color:var(--text-muted); margin: 2px 6px 0;">${m.time}</span>
+                </div>
             </div>
         `;
     }).join('');
@@ -4934,6 +4991,11 @@ function renderClanChatMessages() {
 }
 
 async function sendClanChatMessage() {
+    if (editingClanMessageIdx !== null) {
+        saveEditClanMessage();
+        return;
+    }
+    
     const input = document.getElementById('clan-chat-text-input');
     if (!input) return;
     
@@ -4957,8 +5019,6 @@ async function sendClanChatMessage() {
     
     const newMessages = [...(chatRoom.messages || []), newMsg];
     
-    // --- OPTIMISTIC UPDATE: actualizar estado local ANTES del await ---
-    // Esto previene que el realtime listener sobreescriba el state mientras esperamos
     chatRoom.messages = newMessages;
     localStorage.setItem('obs_conversations', JSON.stringify(state.conversations));
     renderClanChatMessages();
@@ -4970,7 +5030,6 @@ async function sendClanChatMessage() {
                 .update({ messages: newMessages, updated_at: new Date() })
                 .eq('id', clanChatId);
             if (error) throw error;
-            // Re-sincronizar el chatRoom desde el state actual (puede haber sido reemplazado por realtime)
             const freshRoom = state.conversations.find(c => c.id === clanChatId);
             if (freshRoom) {
                 freshRoom.messages = newMessages;
@@ -4980,6 +5039,136 @@ async function sendClanChatMessage() {
             console.error("Error sending clan chat message:", e);
             showToast('❌ Error de conexión al enviar el mensaje.');
         }
+    }
+}
+
+// ─── CLAN CHAT HELPERS (EDIT, DELETE, MENU) ─────────────────────
+let editingClanMessageIdx = null;
+function startEditClanMessage(idx) {
+    const userFaction = getUserFaction();
+    if (!userFaction) return;
+    
+    const clanChatId = 'clan_chat_' + userFaction.faction.id;
+    const chatRoom = state.conversations.find(c => c.id === clanChatId);
+    if (!chatRoom) return;
+    
+    editingClanMessageIdx = idx;
+    
+    const banner = document.getElementById('clan-chat-edit-banner');
+    if (banner) banner.style.display = 'flex';
+    
+    const inp = document.getElementById('clan-chat-text-input');
+    if (inp) {
+        inp.value = chatRoom.messages[idx].text;
+        inp.focus();
+    }
+}
+
+function cancelEditClanMessage() {
+    editingClanMessageIdx = null;
+    const banner = document.getElementById('clan-chat-edit-banner');
+    if (banner) banner.style.display = 'none';
+    
+    const inp = document.getElementById('clan-chat-text-input');
+    if (inp) inp.value = '';
+}
+
+function saveEditClanMessage() {
+    const inp = document.getElementById('clan-chat-text-input');
+    const text = inp.value.trim();
+    if (!text || editingClanMessageIdx === null) return;
+    
+    const userFaction = getUserFaction();
+    if (!userFaction) return;
+    
+    const clanChatId = 'clan_chat_' + userFaction.faction.id;
+    const chatRoom = state.conversations.find(c => c.id === clanChatId);
+    if (!chatRoom) return;
+    
+    chatRoom.messages[editingClanMessageIdx].text = text;
+    chatRoom.messages[editingClanMessageIdx].edited = true;
+    
+    if (supabaseClient) {
+        supabaseClient
+            .from('conversations')
+            .update({ 
+                messages: chatRoom.messages, 
+                updated_at: new Date()
+            })
+            .eq('id', clanChatId)
+            .then(({ error }) => {
+                if (error) showToast('❌ Error al editar: ' + error.message);
+            });
+    }
+    
+    localStorage.setItem('obs_conversations', JSON.stringify(state.conversations));
+    
+    inp.value = '';
+    cancelEditClanMessage();
+    
+    renderClanChatMessages();
+}
+
+function deleteClanMessage(idx, mode) {
+    const userFaction = getUserFaction();
+    if (!userFaction) return;
+    
+    const clanChatId = 'clan_chat_' + userFaction.faction.id;
+    const chatRoom = state.conversations.find(c => c.id === clanChatId);
+    if (!chatRoom) return;
+    
+    const msg = chatRoom.messages[idx];
+    if (mode === 'everyone') {
+        msg.deleted_for_everyone = true;
+        msg.text = 'Mensaje eliminado';
+    } else {
+        msg.deleted_by = msg.deleted_by || [];
+        if (!msg.deleted_by.includes(state.username)) {
+            msg.deleted_by.push(state.username);
+        }
+    }
+    
+    if (supabaseClient) {
+        supabaseClient
+            .from('conversations')
+            .update({ 
+                messages: chatRoom.messages, 
+                updated_at: new Date()
+            })
+            .eq('id', clanChatId)
+            .then(({ error }) => {
+                if (error) showToast('❌ Error al eliminar: ' + error.message);
+            });
+    }
+    
+    localStorage.setItem('obs_conversations', JSON.stringify(state.conversations));
+    
+    renderClanChatMessages();
+    showToast(mode === 'everyone' ? '🗑️ Mensaje eliminado para todos' : '🗑️ Mensaje eliminado para ti');
+}
+
+let activeClanMsgMenuId = null;
+function toggleClanMsgMenu(event, idx) {
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    
+    const targetMenu = document.getElementById(`clan-msg-menu-${idx}`);
+    if (!targetMenu) return;
+    
+    document.querySelectorAll('.msg-options-menu').forEach(menu => {
+        if (menu.id !== `clan-msg-menu-${idx}`) {
+            menu.style.display = 'none';
+        }
+    });
+    
+    if (targetMenu.style.display === 'none' || !targetMenu.style.display) {
+        targetMenu.style.display = 'block';
+        activeClanMsgMenuId = idx;
+    } else {
+        targetMenu.style.display = 'none';
+        activeClanMsgMenuId = null;
     }
 }
 
