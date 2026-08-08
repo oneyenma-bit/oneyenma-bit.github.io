@@ -5106,8 +5106,22 @@ function placeCasinoBet(cellKey) {
         return;
     }
     
+    // Si ya hay apuestas en otro color diferente, las reembolsamos automáticamente
+    let refundAmount = 0;
+    Object.keys(casinoBets).forEach(key => {
+        if (key !== cellKey && casinoBets[key] > 0) {
+            refundAmount += casinoBets[key];
+            delete casinoBets[key];
+        }
+    });
+    
+    if (refundAmount > 0) {
+        saveUserPoints(state.points + refundAmount);
+    }
+    
     if ((state.points || 0) < casinoSelectedChip) {
         showToast('⚠️ No tienes suficientes Gemas.');
+        syncCasinoUI();
         return;
     }
     
