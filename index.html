@@ -1575,6 +1575,12 @@
                     <div id="chat-messages" style="flex: 1; padding: 1rem; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem;">
                         <!-- Chat messages -->
                     </div>
+                    
+                    <!-- Edit Message Banner -->
+                    <div id="chat-edit-banner" style="display: none; align-items: center; justify-content: space-between; background: rgba(168, 85, 247, 0.15); border-left: 4px solid #a855f7; padding: 6px 12px; font-size: 0.78rem; color: #cfc2d6; border-top: 1px solid rgba(255,255,255,0.05); border-bottom: 1px solid rgba(255,255,255,0.05); font-family: var(--font);">
+                        <span><i class="fa-solid fa-pen" style="color: #a855f7; margin-right: 4px;"></i> Editando mensaje</span>
+                        <button onclick="cancelEditMessage()" style="background:none; border:none; color:rgba(255,255,255,0.5); cursor:pointer; font-size:0.8rem; padding: 2px 6px;"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
 
                     <div id="chat-input-area" style="padding: 1rem; border-top: 1px solid rgba(255,255,255,0.1); display: none; gap: .5rem; flex-shrink: 0;">
                         <input type="text" id="chat-reply-text" placeholder="Escribe un mensaje..." style="flex: 1; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); color: white; padding: .8rem; border-radius: 8px;" onkeypress="if(event.key === 'Enter') replyChat()">

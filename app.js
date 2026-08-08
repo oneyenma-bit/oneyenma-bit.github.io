@@ -151,7 +151,7 @@ const state = {
     // Profile customization
     unlockedFrames: JSON.parse(localStorage.getItem('obs_unlocked_frames') || '[]'),
     activeFrame: localStorage.getItem('obs_active_frame') || '',
-    avatarSource: 'mc-heads',
+    avatarSource: localStorage.getItem('obs_avatar_source') || 'minecraft',
     customAvatar: localStorage.getItem('obs_custom_avatar') || '',
     profileFont: localStorage.getItem('obs_profile_font') || 'Outfit',
     redeemedCodes: JSON.parse(localStorage.getItem('obs_redeemed_codes') || '[]'),
@@ -888,6 +888,8 @@ function loadUserDataOnLogin(userId, username) {
                     const msgFrame = reg.messages?.find(m => m.startsWith('active_frame:'));
                     const msgUnlocked = reg.messages?.find(m => m.startsWith('unlocked_frames:'));
                     const msgSpin = reg.messages?.find(m => m.startsWith('last_spin_time:'));
+                    const msgSource = reg.messages?.find(m => m.startsWith('avatar_source:'));
+                    const msgCustom = reg.messages?.find(m => m.startsWith('custom_avatar:'));
 
                     if (msgGems) {
                         const gemsVal = parseInt(msgGems.replace('gems:', ''), 10) || 0;
@@ -895,6 +897,14 @@ function loadUserDataOnLogin(userId, username) {
                     }
                     if (msgFrame) {
                         state.activeFrame = msgFrame.replace('active_frame:', '');
+                    }
+                    if (msgSource) {
+                        state.avatarSource = msgSource.replace('avatar_source:', '');
+                        localStorage.setItem('obs_avatar_source', state.avatarSource);
+                    }
+                    if (msgCustom) {
+                        state.customAvatar = msgCustom.replace('custom_avatar:', '');
+                        localStorage.setItem('obs_custom_avatar', state.customAvatar);
                     }
                     if (msgUnlocked) {
                         try {
@@ -978,7 +988,9 @@ function saveUserDataToStorage(skipSupabase = false) {
                             !m.startsWith('gems:') && 
                             !m.startsWith('active_frame:') && 
                             !m.startsWith('unlocked_frames:') &&
-                            !m.startsWith('last_spin_time:')
+                            !m.startsWith('last_spin_time:') &&
+                            !m.startsWith('avatar_source:') &&
+                            !m.startsWith('custom_avatar:')
                         );
                         
                         // Add new values
@@ -986,6 +998,8 @@ function saveUserDataToStorage(skipSupabase = false) {
                         messages.push('active_frame:' + (state.activeFrame || ''));
                         messages.push('unlocked_frames:' + JSON.stringify(state.unlockedFrames || []));
                         messages.push('last_spin_time:' + lastSpin);
+                        messages.push('avatar_source:' + (state.avatarSource || 'minecraft'));
+                        messages.push('custom_avatar:' + (state.customAvatar || ''));
                         
                         supabaseClient
                             .from('conversations')
@@ -2091,19 +2105,7 @@ function renderMarketplace() {
         const isAdmin = isAdminUser();
         const isOwner = realOwner || isAdmin;
 
-        // Determine publisher avatar frame
-        const isCurrentUser = (pubInfo.legacyId ? pubInfo.legacyId === state.legacyId : pubInfo.username === state.username);
-        const pubFrame = isCurrentUser ? state.activeFrame : '';
-        const pubAvatarSrc = isCurrentUser && state.avatarSource === 'custom' && state.customAvatar
-            ? state.customAvatar
-            : pubSkin;
-
-        const avatarFrameMarkup = getAvatarFrameHTML(pubAvatarSrc, pubFrame, {
-            size: '32px',
-            alt: pubInfo.username,
-            onClick: `openUserProfileModal('${pubInfo.username.replace(/'/g, "\\'")}')`,
-            extraWrapStyle: 'cursor:pointer;'
-        });
+        const avatarFrameMarkup = getPlayerAvatarAndFrameHTML(pubInfo.username, '32px', `openUserProfileModal('${pubInfo.username.replace(/'/g, "\\'")}')`);
 
         return `
             <div class="market-card" onclick="openListingDetailModal('${item.id}')">
@@ -2603,12 +2605,29 @@ function renderInboxList() {
         const item = state.marketplaceListings.find(l => l.id === c.listingId);
         const itemTitle = item ? item.title : 'Publicación eliminada';
 
+        let lastText = '';
+        if (lastMsg) {
+            const isMe = lastMsg.sender === state.username;
+            if (lastMsg.deleted_for_everyone) {
+                lastText = '<i class="fa-solid fa-ban" style="font-size:0.72rem; opacity:0.6;"></i> Mensaje eliminado';
+            } else if (lastMsg.deleted_by && lastMsg.deleted_by.includes(state.username)) {
+                lastText = '<i>Mensaje eliminado</i>';
+            } else {
+                lastText = (isMe ? 'Tú: ' : '') + lastMsg.text;
+            }
+        }
+
         return `
-            <div style="padding: 1rem; border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer; ${isActive}" onclick="openChat('${c.id}')">
-                <div style="font-weight:bold; color: white;">${otherUser}</div>
-                <div style="font-size: 0.8rem; color: #f59e0b; margin-bottom: 4px;">Oferta: ${itemTitle}</div>
-                <div style="font-size: 0.85rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                    ${lastMsg.sender === state.username ? 'Tú: ' : ''}${lastMsg.text}
+            <div style="padding: 1rem; border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer; display: flex; align-items: center; gap: 12px; ${isActive}" onclick="openChat('${c.id}')">
+                ${getPlayerAvatarAndFrameHTML(otherUser, '34px')}
+                <div style="flex: 1; min-width: 0;">
+                    <div style="font-weight:bold; color: white; display: flex; justify-content: space-between; align-items: center; font-size: 0.92rem;">
+                        <span>${otherUser}</span>
+                    </div>
+                    <div style="font-size: 0.72rem; color: #fbbf24; margin-bottom: 2px; font-weight: 800; font-family: var(--font);">${itemTitle}</div>
+                    <div style="font-size: 0.8rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500;">
+                        ${lastText}
+                    </div>
                 </div>
             </div>
         `;
@@ -2627,7 +2646,7 @@ function renderChatMessages() {
     const inputArea = document.getElementById('chat-input-area');
 
     if (!activeChatId) {
-        header.innerHTML = `<span style="color: var(--text-muted);">Selecciona una conversación para empezar a chatear.</span>`;
+        header.innerHTML = `<span style="color: var(--text-muted); font-size: 0.88rem; font-weight: 500;">Selecciona una conversación para empezar a chatear.</span>`;
         msgsBox.innerHTML = '';
         inputArea.style.display = 'none';
         return;
@@ -2640,19 +2659,82 @@ function renderChatMessages() {
     const sellerName = parsePublisher(c.seller).username;
     const otherUser = buyerName.toLowerCase() === state.username.toLowerCase() ? sellerName : buyerName;
     header.innerHTML = `
-        <img src="https://mc-heads.net/avatar/${encodeURIComponent(otherUser)}/32" style="border-radius:4px; width:32px; height:32px;">
-        <strong style="color:white; font-size:1.1rem;">${otherUser}</strong>
-        ${c.status === 'pending' ? `<span style="background:#ef4444; padding:2px 6px; border-radius:4px; font-size:0.75rem; margin-left:auto;">Solicitud Pendiente</span>` : ''}
+        <div style="display: flex; align-items: center; gap: 10px;">
+            ${getPlayerAvatarAndFrameHTML(otherUser, '34px')}
+            <div style="display: flex; flex-direction: column;">
+                <strong style="color:white; font-size:1.05rem; font-weight:700;">${otherUser}</strong>
+                <span style="font-size:0.68rem; color:#4ade80; font-weight:600;"><i class="fa-solid fa-circle" style="font-size:0.5rem; margin-right:4px;"></i>Activo ahora</span>
+            </div>
+        </div>
+        ${c.status === 'pending' ? `<span style="background:#ef4444; color:white; padding:4px 8px; border-radius:6px; font-size:0.7rem; font-weight:bold; margin-left:auto; letter-spacing:0.5px;">SOLICITUD PENDIENTE</span>` : ''}
     `;
 
-    msgsBox.innerHTML = c.messages.map(m => {
+    let lastSender = '';
+    msgsBox.innerHTML = c.messages.map((m, idx) => {
         const isMe = m.sender === state.username;
-        return `
-            <div style="display:flex; flex-direction:column; align-items: ${isMe ? 'flex-end' : 'flex-start'};">
-                <div style="background: ${isMe ? '#4ade80' : 'rgba(255,255,255,0.1)'}; color: ${isMe ? '#000' : '#fff'}; padding: .6rem 1rem; border-radius: 12px; max-width: 80%; margin-bottom: 2px;">
+        
+        // Comprobar si fue eliminado para mí
+        const isDeletedForMe = m.deleted_by && m.deleted_by.includes(state.username);
+        if (isDeletedForMe) return '';
+        
+        const showAvatar = !isMe && lastSender !== m.sender;
+        lastSender = m.sender;
+        
+        let bubbleContent = '';
+        if (m.deleted_for_everyone) {
+            bubbleContent = `
+                <div style="font-style: italic; color: rgba(255,255,255,0.4); font-size: 0.82rem; display: flex; align-items: center; gap: 6px; user-select: none;">
+                    <i class="fa-solid fa-ban" style="font-size: 0.72rem;"></i> Mensaje eliminado
+                </div>
+            `;
+        } else {
+            bubbleContent = `
+                <div class="msg-text-content" style="word-break: break-word; line-height: 1.4; font-size: 0.88rem; font-weight: 500;">
                     ${m.text}
                 </div>
-                <span style="font-size:0.7rem; color:var(--text-muted); margin:0 4px;">${m.time}</span>
+                ${m.edited ? `<span style="font-size: 0.6rem; color: rgba(255,255,255,0.35); margin-top: 3px; display: block; font-weight: 600; text-align: right; user-select: none;">(editado)</span>` : ''}
+            `;
+        }
+        
+        // Menú de opciones (WhatsApp)
+        let menuHtml = '';
+        if (!m.deleted_for_everyone) {
+            menuHtml = `
+                <div class="msg-options-menu" id="msg-menu-${idx}" style="display: none; position: absolute; top: 100%; ${isMe ? 'right: 0' : 'left: 0'}; z-index: 100; background: #181528; border: 1.5px solid rgba(168, 85, 247, 0.4); border-radius: 8px; padding: 4px 0; min-width: 140px; box-shadow: 0 4px 15px rgba(0,0,0,0.6);">
+                    ${isMe ? `<button onclick="startEditMessage(${idx})" class="msg-menu-item"><i class="fa-solid fa-pen" style="color:#a855f7;"></i> Editar mensaje</button>` : ''}
+                    <button onclick="deleteMessage(${idx}, 'me')" class="msg-menu-item"><i class="fa-solid fa-user-minus" style="color:#fbbf24;"></i> Eliminar para mí</button>
+                    ${isMe ? `<button onclick="deleteMessage(${idx}, 'everyone')" class="msg-menu-item delete-danger"><i class="fa-solid fa-trash-can"></i> Eliminar para todos</button>` : ''}
+                </div>
+            `;
+        }
+        
+        const avatarCol = !isMe ? `
+            <div style="width: 32px; display: flex; justify-content: center; align-items: flex-end; margin-right: 6px; padding-bottom: 2px;">
+                ${showAvatar ? getPlayerAvatarAndFrameHTML(m.sender, '26px') : '<div style="width:26px; height:26px;"></div>'}
+            </div>
+        ` : '';
+        
+        const bubbleStyle = isMe 
+            ? 'background: linear-gradient(135deg, rgba(168, 85, 247, 0.22) 0%, rgba(168, 85, 247, 0.08) 100%); border: 1.5px solid rgba(168, 85, 247, 0.3); border-radius: 16px 16px 0 16px; color: #fff; padding: 8px 12px; position: relative;'
+            : 'background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px 16px 16px 0; color: #fff; padding: 8px 12px; position: relative;';
+            
+        return `
+            <div class="chat-message-row ${isMe ? 'msg-me' : 'msg-other'}" style="display: flex; justify-content: ${isMe ? 'flex-end' : 'flex-start'}; margin-bottom: 6px; position: relative;">
+                ${avatarCol}
+                <div style="display: flex; flex-direction: column; align-items: ${isMe ? 'flex-end' : 'flex-start'}; max-width: 75%;">
+                    <div class="chat-bubble-container" style="position: relative; display: flex; align-items: center; gap: 6px;">
+                        <div class="chat-bubble" style="${bubbleStyle}">
+                            ${bubbleContent}
+                        </div>
+                        ${!m.deleted_for_everyone ? `
+                            <button onclick="toggleMsgMenu(event, ${idx})" class="msg-options-btn" style="background: none; border: none; color: rgba(255,255,255,0.3); cursor: pointer; padding: 4px; border-radius: 50%; opacity: 0; transition: opacity 0.15s; display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; flex-shrink:0;">
+                                <i class="fa-solid fa-chevron-down" style="font-size: 0.65rem;"></i>
+                            </button>
+                            ${menuHtml}
+                        ` : ''}
+                    </div>
+                    <span style="font-size:0.65rem; color:var(--text-muted); margin: 2px 6px 0;">${m.time}</span>
+                </div>
             </div>
         `;
     }).join('');
@@ -2686,6 +2768,11 @@ function renderChatMessages() {
 }
 
 function replyChat() {
+    if (editingMessageIdx !== null) {
+        saveEditMessage();
+        return;
+    }
+
     const inp = document.getElementById('chat-reply-text');
     const text = inp.value.trim();
     if (!text || !activeChatId) return;
@@ -2729,6 +2816,235 @@ function replyChat() {
         renderChatMessages();
     }
     updateInboxBadge();
+}
+
+// ─── CHAT PROFILE LOADING & WHATSAPP HELPERS ───────────────────
+const profileCache = {};
+const pendingProfileFetches = new Set();
+
+function getPlayerAvatarAndFrameHTML(username, size = '36px', onClick = '') {
+    const uKey = (username || 'invitado').toLowerCase();
+    let avatarSrc = `https://mc-heads.net/avatar/${encodeURIComponent(username || 'MHF_Steve')}/40`;
+    let frameId = '';
+    
+    if (uKey === (state.username || '').toLowerCase()) {
+        avatarSrc = (state.avatarSource === 'custom' && state.customAvatar) 
+            ? state.customAvatar 
+            : `https://mc-heads.net/avatar/${encodeURIComponent(state.username || 'MHF_Steve')}/40`;
+        frameId = state.activeFrame || '';
+    } else if (profileCache[uKey]) {
+        const cached = profileCache[uKey];
+        avatarSrc = (cached.avatarSource === 'custom' && cached.customAvatar)
+            ? cached.customAvatar
+            : `https://mc-heads.net/avatar/${encodeURIComponent(username)}/40`;
+        frameId = cached.activeFrame || '';
+    } else {
+        fetchUserProfile(username);
+    }
+    
+    const options = {
+        size: size,
+        extraWrapClass: 'user-avatar-styled',
+        extraWrapStyle: 'position: relative;' + (onClick ? ' cursor: pointer;' : ''),
+        onClick: onClick
+    };
+    
+    const innerHtml = getAvatarFrameHTML(avatarSrc, frameId, options);
+    return innerHtml.replace('class="avatar-frame-wrap', `data-username="${uKey}" class="avatar-frame-wrap`);
+}
+
+function fetchUserProfile(username) {
+    const uKey = (username || '').toLowerCase();
+    if (uKey === 'invitado' || uKey === '' || pendingProfileFetches.has(uKey) || profileCache[uKey]) return;
+    
+    pendingProfileFetches.add(uKey);
+    
+    if (supabaseClient) {
+        supabaseClient
+            .from('conversations')
+            .select('messages')
+            .eq('listing_id', 'registration')
+            .eq('buyer', uKey)
+            .then(({ data }) => {
+                pendingProfileFetches.delete(uKey);
+                if (data && data.length > 0) {
+                    const reg = data[0];
+                    const messages = reg.messages || [];
+                    const msgFrame = messages.find(m => m.startsWith('active_frame:'));
+                    const msgSource = messages.find(m => m.startsWith('avatar_source:'));
+                    const msgCustom = messages.find(m => m.startsWith('custom_avatar:'));
+                    
+                    profileCache[uKey] = {
+                        activeFrame: msgFrame ? msgFrame.replace('active_frame:', '') : '',
+                        avatarSource: msgSource ? msgSource.replace('avatar_source:', '') : 'minecraft',
+                        customAvatar: msgCustom ? msgCustom.replace('custom_avatar:', '') : ''
+                    };
+                    
+                    triggerUIRefreshForUser(uKey);
+                }
+            })
+            .catch(() => {
+                pendingProfileFetches.delete(uKey);
+            });
+    }
+}
+
+function triggerUIRefreshForUser(usernameKey) {
+    const cached = profileCache[usernameKey];
+    if (!cached) return;
+    
+    document.querySelectorAll(`.avatar-frame-wrap[data-username="${usernameKey}"]`).forEach(el => {
+        const size = el.style.width || '36px';
+        const onClickAttr = el.getAttribute('onclick') || '';
+        
+        const avatarSrc = (cached.avatarSource === 'custom' && cached.customAvatar)
+            ? cached.customAvatar
+            : `https://mc-heads.net/avatar/${encodeURIComponent(usernameKey)}/40`;
+        const frameId = cached.activeFrame || '';
+        
+        const newHtmlMarkup = getAvatarFrameHTML(avatarSrc, frameId, {
+            size: size,
+            extraWrapClass: 'user-avatar-styled',
+            extraWrapStyle: 'position: relative;' + (onClickAttr ? ' cursor: pointer;' : ''),
+            onClick: onClickAttr
+        });
+        
+        const temp = document.createElement('div');
+        temp.innerHTML = newHtmlMarkup;
+        const newEl = temp.firstElementChild;
+        
+        if (newEl) {
+            el.className = newEl.className;
+            el.classList.add('user-avatar-styled');
+            el.innerHTML = newEl.innerHTML;
+        }
+    });
+}
+
+let activeMsgMenuId = null;
+function toggleMsgMenu(event, idx) {
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    
+    const targetMenu = document.getElementById(`msg-menu-${idx}`);
+    if (!targetMenu) return;
+    
+    document.querySelectorAll('.msg-options-menu').forEach(menu => {
+        if (menu.id !== `msg-menu-${idx}`) {
+            menu.style.display = 'none';
+        }
+    });
+    
+    if (targetMenu.style.display === 'none' || !targetMenu.style.display) {
+        targetMenu.style.display = 'block';
+        activeMsgMenuId = idx;
+    } else {
+        targetMenu.style.display = 'none';
+        activeMsgMenuId = null;
+    }
+}
+
+// Cerrar menús flotantes al hacer clic en cualquier parte
+document.addEventListener('click', () => {
+    document.querySelectorAll('.msg-options-menu').forEach(menu => {
+        menu.style.display = 'none';
+    });
+    activeMsgMenuId = null;
+});
+
+function deleteMessage(idx, mode) {
+    const c = state.conversations.find(conv => conv.id === activeChatId);
+    if (!c) return;
+    
+    const msg = c.messages[idx];
+    if (mode === 'everyone') {
+        msg.deleted_for_everyone = true;
+        msg.text = 'Mensaje eliminado';
+    } else {
+        msg.deleted_by = msg.deleted_by || [];
+        if (!msg.deleted_by.includes(state.username)) {
+            msg.deleted_by.push(state.username);
+        }
+    }
+    
+    if (supabaseClient) {
+        supabaseClient
+            .from('conversations')
+            .update({ 
+                messages: c.messages, 
+                updated_at: new Date()
+            })
+            .eq('id', c.id)
+            .then(({ error }) => {
+                if (error) showToast('❌ Error al eliminar: ' + error.message);
+            });
+    }
+    
+    localStorage.setItem('obs_conversations', JSON.stringify(state.conversations));
+    renderInboxList();
+    renderChatMessages();
+    showToast(mode === 'everyone' ? '🗑️ Mensaje eliminado para todos' : '🗑️ Mensaje eliminado para ti');
+}
+
+let editingMessageIdx = null;
+function startEditMessage(idx) {
+    const c = state.conversations.find(conv => conv.id === activeChatId);
+    if (!c) return;
+    
+    editingMessageIdx = idx;
+    
+    const banner = document.getElementById('chat-edit-banner');
+    if (banner) banner.style.display = 'flex';
+    
+    const inp = document.getElementById('chat-reply-text');
+    if (inp) {
+        inp.value = c.messages[idx].text;
+        inp.focus();
+    }
+}
+
+function cancelEditMessage() {
+    editingMessageIdx = null;
+    const banner = document.getElementById('chat-edit-banner');
+    if (banner) banner.style.display = 'none';
+    
+    const inp = document.getElementById('chat-reply-text');
+    if (inp) inp.value = '';
+}
+
+function saveEditMessage() {
+    const inp = document.getElementById('chat-reply-text');
+    const text = inp.value.trim();
+    if (!text || !activeChatId || editingMessageIdx === null) return;
+    
+    const c = state.conversations.find(conv => conv.id === activeChatId);
+    if (!c) return;
+    
+    c.messages[editingMessageIdx].text = text;
+    c.messages[editingMessageIdx].edited = true;
+    
+    if (supabaseClient) {
+        supabaseClient
+            .from('conversations')
+            .update({ 
+                messages: c.messages, 
+                updated_at: new Date()
+            })
+            .eq('id', c.id)
+            .then(({ error }) => {
+                if (error) showToast('❌ Error al editar: ' + error.message);
+            });
+    }
+    
+    localStorage.setItem('obs_conversations', JSON.stringify(state.conversations));
+    
+    inp.value = '';
+    cancelEditMessage();
+    
+    renderInboxList();
+    renderChatMessages();
 }
 
 // Intercept syncUser to also update badge
@@ -4001,22 +4317,37 @@ function renderProfileAvatarPreview(username, isOwnProfile) {
     const wrap = document.getElementById('prf-avatar-wrap');
     if (!wrap) return;
 
-    let avatarSrc;
+    const uKey = (username || '').toLowerCase();
+    
+    // Si es el perfil propio, usar variables locales de inmediato
     if (isOwnProfile) {
-        if (state.avatarSource === 'custom' && state.customAvatar) {
-            avatarSrc = state.customAvatar;
-        } else {
-            avatarSrc = `https://mc-heads.net/avatar/${encodeURIComponent(username || 'Steve')}/80`;
-        }
-    } else {
-        avatarSrc = `https://mc-heads.net/avatar/${encodeURIComponent(username || 'Steve')}/80`;
+        let avatarSrc = (state.avatarSource === 'custom' && state.customAvatar)
+            ? state.customAvatar
+            : `https://mc-heads.net/avatar/${encodeURIComponent(username || 'Steve')}/80`;
+        const frameId = state.activeFrame || '';
+        const markup = getAvatarFrameHTML(avatarSrc, frameId, { size: '90px', alt: username });
+        wrap.innerHTML = markup.replace('class="avatar-frame-wrap', `data-username="${uKey}" class="avatar-frame-wrap`);
+        return;
     }
-
-    const frameId = isOwnProfile ? state.activeFrame : '';
-    wrap.innerHTML = getAvatarFrameHTML(avatarSrc, frameId, {
-        size: '90px',
-        alt: username
-    });
+    
+    // Si es el perfil de otro jugador, intentar usar caché o cargar de Supabase
+    if (profileCache[uKey]) {
+        const cached = profileCache[uKey];
+        const avatarSrc = (cached.avatarSource === 'custom' && cached.customAvatar)
+            ? cached.customAvatar
+            : `https://mc-heads.net/avatar/${encodeURIComponent(username || 'Steve')}/80`;
+        const frameId = cached.activeFrame || '';
+        const markup = getAvatarFrameHTML(avatarSrc, frameId, { size: '90px', alt: username });
+        wrap.innerHTML = markup.replace('class="avatar-frame-wrap', `data-username="${uKey}" class="avatar-frame-wrap`);
+    } else {
+        // Fallback mientras carga en segundo plano
+        const avatarSrc = `https://mc-heads.net/avatar/${encodeURIComponent(username || 'Steve')}/80`;
+        const markup = getAvatarFrameHTML(avatarSrc, '', { size: '90px', alt: username });
+        wrap.innerHTML = markup.replace('class="avatar-frame-wrap', `data-username="${uKey}" class="avatar-frame-wrap`);
+        
+        // Cargar datos del otro jugador de la base de datos
+        fetchUserProfile(username);
+    }
 }
 
 function updateProfileAvatarPreview(source) {
@@ -4027,6 +4358,7 @@ function updateProfileAvatarPreview(source) {
     renderProfileAvatarPreview(state.username, true);
     syncUser();
     renderMarketListings();
+    saveUserDataToStorage(false);
     showToast('🖼️ Foto de perfil guardada');
 }
 
@@ -4051,6 +4383,7 @@ function onProfileImageUpload(event) {
         renderProfileAvatarPreview(state.username, true);
         syncUser();
         renderMarketListings();
+        saveUserDataToStorage(false);
         showToast('🖼️ Foto personalizada guardada');
     };
     reader.readAsDataURL(file);
