@@ -430,24 +430,7 @@ function updateSettingsUI() {
 }
 
 function playMcClick() {
-    if (localStorage.getItem('mc_sound') === 'false') return;
-    try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(120, ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(10, ctx.currentTime + 0.05);
-        
-        gain.gain.setValueAtTime(0.15, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.05);
-        
-        osc.start();
-        osc.stop(ctx.currentTime + 0.05);
-    } catch (e) {}
+    // Deshabilitado definitivamente para evitar bugs con AudioContext en navegadores
 }
 
 function playVictoryFanfare() {
@@ -777,7 +760,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // ─── MULTI-VIEW NAVIGATION ────────────────────────────────────
 function switchTab(tabId) {
-    const validTabs = ['inicio', 'reglas', 'quienes', 'kits', 'puntos', 'marketplace', 'facciones'];
+    const validTabs = ['inicio', 'reglas', 'quienes', 'kits', 'puntos', 'marketplace', 'facciones', 'casino'];
     if (!validTabs.includes(tabId)) tabId = 'inicio';
 
     document.querySelectorAll('.view-section').forEach(sec => {
@@ -792,7 +775,7 @@ function switchTab(tabId) {
     }
 
     document.querySelectorAll('.cat-tab').forEach(tab => {
-        tab.classList.toggle('active', tab.dataset.tab === tabId);
+        tab.classList.toggle('active', tab.dataset.tab === tabId || (tabId === 'casino' && tab.id === 'tab-casino'));
     });
 
     syncUser();
@@ -802,6 +785,9 @@ function switchTab(tabId) {
     }
     if (tabId === 'facciones') {
         renderFactions();
+    }
+    if (tabId === 'casino') {
+        initCasino();
     }
 
     const floatCart = document.getElementById('floating-cart');
@@ -4212,6 +4198,7 @@ function checkRouletteCooldown() {
     const lastSpin = parseInt(localStorage.getItem('obs_last_spin_time') || '0');
     const now = getSecureTime();
     const cooldown = 24 * 60 * 60 * 1000;
+    const maxSpins = 10;
 
     const timerEl = document.getElementById('roulette-countdown-text');
     const spinBtn = document.getElementById('spin-roulette-btn');
@@ -4223,22 +4210,49 @@ function checkRouletteCooldown() {
             spinBtn.disabled = true;
             spinBtn.innerHTML = '<i class="fa-solid fa-ban"></i> HORA INCORRECTA';
         }
-        return false;
+        return { spins: 0, remaining: cooldown };
     }
 
-    const diff = now - lastSpin;
+    let spins = 0;
+    let remaining = 0;
 
-    if (diff >= cooldown) {
-        if (timerEl && timerEl.textContent !== '¡Giro disponible!') {
-            timerEl.textContent = '¡Giro disponible!';
-        }
-        if (spinBtn && spinBtn.disabled && !isSpinning) {
-            spinBtn.disabled = false;
-            spinBtn.innerHTML = '<i class="fa-solid fa-rotate-right"></i> ¡GIRAR RULETA AHORA!';
-        }
-        return true;
+    if (lastSpin === 0) {
+        spins = 1;
+        remaining = 0;
     } else {
-        const remaining = cooldown - diff;
+        const diff = now - lastSpin;
+        if (diff >= 0) {
+            spins = Math.floor(diff / cooldown);
+            if (spins > maxSpins) {
+                spins = maxSpins;
+                const adjustedLastSpin = now - maxSpins * cooldown;
+                localStorage.setItem('obs_last_spin_time', adjustedLastSpin.toString());
+                const key = state.legacyId || (state.username ? state.username.toLowerCase() : null);
+                if (key) {
+                    localStorage.setItem(`obs_last_spin_time_${key}`, adjustedLastSpin.toString());
+                }
+            }
+            remaining = cooldown - (diff % cooldown);
+        } else {
+            spins = 0;
+            remaining = cooldown;
+        }
+    }
+
+    if (spins > 0) {
+        let text = `¡Giro disponible! Tienes ${spins} giro${spins > 1 ? 's' : ''}`;
+        if (spins === maxSpins) {
+            text = `¡Máximo de giros acumulados! (${spins})`;
+        }
+        if (timerEl && timerEl.textContent !== text) {
+            timerEl.textContent = text;
+        }
+        if (spinBtn && !isSpinning) {
+            spinBtn.disabled = false;
+            spinBtn.innerHTML = `<i class="fa-solid fa-rotate-right"></i> ¡GIRAR RULETA AHORA! (${spins} disponible${spins > 1 ? 's' : ''})`;
+        }
+        return { spins, remaining };
+    } else {
         const hours = Math.floor(remaining / (1000 * 60 * 60));
         const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
         const seconds = Math.floor((remaining % (1000 * 60)) / 1000);
@@ -4254,15 +4268,16 @@ function checkRouletteCooldown() {
                 spinBtn.innerHTML = btnText;
             }
         }
-        return false;
+        return { spins: 0, remaining };
     }
 }
 
 function spinDailyRoulette() {
     if (isSpinning) return;
 
-    if (!checkRouletteCooldown()) {
-        showToast('⏳ Ya giraste la ruleta hoy o la hora no está sincronizada.');
+    const { spins } = checkRouletteCooldown();
+    if (spins <= 0) {
+        showToast('⏳ No tienes giros disponibles.');
         return;
     }
 
@@ -4299,7 +4314,26 @@ function spinDailyRoulette() {
     setTimeout(async () => {
         isSpinning = false;
         const secureNow = getSecureTime();
-        localStorage.setItem('obs_last_spin_time', secureNow.toString());
+        const lastSpin = parseInt(localStorage.getItem('obs_last_spin_time') || '0');
+        const cooldown = 24 * 60 * 60 * 1000;
+        
+        let newLastSpin;
+        if (lastSpin === 0) {
+            newLastSpin = secureNow;
+        } else {
+            newLastSpin = lastSpin + cooldown;
+            if (secureNow - newLastSpin > 10 * cooldown) {
+                newLastSpin = secureNow - 10 * cooldown;
+            }
+        }
+
+        localStorage.setItem('obs_last_spin_time', newLastSpin.toString());
+        const key = state.legacyId || (state.username ? state.username.toLowerCase() : null);
+        if (key) {
+            localStorage.setItem(`obs_last_spin_time_${key}`, newLastSpin.toString());
+        }
+        
+        saveUserDataToStorage(false);
 
         // Grant REAL gems to state, localStorage and database
         const amount = prize.points;
@@ -4904,5 +4938,429 @@ async function kickClanMember(username, conversationId) {
             syncClanChatHeader();
         }
     );
+}
+
+// ─── CASINO RÚNICO (EUROPEAN ROULETTE ENGINE - SIMPLIFIED) ─────
+const CASINO_WHEEL = [0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26];
+const CASINO_RED = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
+let casinoSelectedChip = 10;
+let casinoBets = {};
+let casinoLastBets = {};
+let casinoSpinning = false;
+let casinoRotation = 0;
+let casinoInitDone = false;
+
+function initCasino() {
+    // Render wheel SVG segments
+    if (!casinoInitDone) {
+        const CX = 175, CY = 175, OR = 158, IR = 48, SEG = 360 / 37;
+        
+        function polar(r, deg) {
+            const rad = ((deg - 90) * Math.PI) / 180;
+            return { x: CX + r * Math.cos(rad), y: CY + r * Math.sin(rad) };
+        }
+        
+        function getArcPath(s, e) {
+            const o1 = polar(OR, s), o2 = polar(OR, e);
+            const i1 = polar(IR, s), i2 = polar(IR, e);
+            const lg = e - s > 180 ? 1 : 0;
+            return `M ${o1.x} ${o1.y} A ${OR} ${OR} 0 ${lg} 1 ${o2.x} ${o2.y} L ${i2.x} ${i2.y} A ${IR} ${IR} 0 ${lg} 0 ${i1.x} ${i1.y} Z`;
+        }
+        
+        let wheelHtml = '';
+        CASINO_WHEEL.forEach((num, i) => {
+            const s = i * SEG;
+            const e = (i + 1) * SEG;
+            const mid = s + SEG / 2;
+            const tp = polar(OR * 0.78, mid);
+            const color = num === 0 ? '#16a34a' : (CASINO_RED.has(num) ? '#dc2626' : '#1e1c2b');
+            
+            wheelHtml += `
+                <g class="wheel-segment-group" style="transition: opacity 0.15s;">
+                    <path d="${getArcPath(s, e)}" fill="${color}" stroke="rgba(0,0,0,0.5)" stroke-width="0.8" />
+                    <text x="${tp.x}" y="${tp.y}" text-anchor="middle" dominant-baseline="middle" fill="#ffffff" font-size="7.5" font-weight="800" transform="rotate(${mid + 90} ${tp.x} ${tp.y})">${num}</text>
+                </g>
+            `;
+        });
+        
+        const wheelGroup = document.getElementById('casino-wheel-group');
+        if (wheelGroup) {
+            wheelGroup.innerHTML = wheelHtml;
+        }
+        
+        casinoInitDone = true;
+    }
+    
+    renderCasinoChips();
+    syncCasinoUI();
+}
+
+function renderCasinoChips() {
+    const chipValues = [10, 50, 100, 500, 1000];
+    const chipGems = {
+        10: { color: '#3b82f6', glow: 'rgba(59, 130, 246, 0.65)', name: 'Zafiro' },
+        50: { color: '#10b981', glow: 'rgba(16, 185, 129, 0.65)', name: 'Esmeralda' },
+        100: { color: '#a855f7', glow: 'rgba(168, 85, 247, 0.65)', name: 'Amatista' },
+        500: { color: '#f59e0b', glow: 'rgba(245, 158, 11, 0.65)', name: 'Ámbar' },
+        1000: { color: '#ef4444', glow: 'rgba(239, 68, 68, 0.65)', name: 'Rubí' }
+    };
+    
+    let chipHtml = '';
+    chipValues.forEach(val => {
+        const active = casinoSelectedChip === val;
+        const gem = chipGems[val];
+        
+        const activeBorder = active ? `border: 2px solid #ffffff; box-shadow: 0 0 16px ${gem.color}, inset 0 0 8px ${gem.color}; transform: scale(1.1);` : `border: 1.5px solid rgba(255, 255, 255, 0.15); box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);`;
+        const activeClass = active ? 'gem-chip-btn active' : 'gem-chip-btn';
+        
+        chipHtml += `
+            <button onclick="selectCasinoChip(${val})" class="${activeClass}" style="position: relative; width: 62px; padding: 8px 0; border-radius: 12px; background: linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); color: #fff; cursor: pointer; transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; ${activeBorder}">
+                <div style="position: relative; animation: floatGem 3s ease-in-out infinite; animation-delay: ${val * 0.005}s;">
+                    <svg width="22" height="22" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0 0 6px ${gem.glow});">
+                        <path d="M32 2L12 22L32 62L52 22L32 2Z" fill="url(#grad-${val})" />
+                        <path d="M32 2L24 22L32 62L40 22L32 2Z" fill="rgba(255,255,255,0.2)" />
+                        <path d="M32 2L32 62" stroke="rgba(255,255,255,0.3)" stroke-width="2" />
+                        <path d="M12 22H52" stroke="rgba(255,255,255,0.2)" stroke-width="2" />
+                        <defs>
+                            <linearGradient id="grad-${val}" x1="32" y1="2" x2="32" y2="62" gradientUnits="userSpaceOnUse">
+                                <stop offset="0%" stop-color="#ffffff" stop-opacity="0.9" />
+                                <stop offset="35%" stop-color="${gem.color}" />
+                                <stop offset="100%" stop-color="#050510" />
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                </div>
+                <span style="font-family: var(--font); font-size: 0.82rem; font-weight: 900; letter-spacing: 0.5px; text-shadow: 0 0 8px ${gem.glow};">${val}</span>
+            </button>
+        `;
+    });
+    
+    const chipSelector = document.getElementById('casino-chip-selector');
+    if (chipSelector) {
+        chipSelector.innerHTML = chipHtml;
+    }
+}
+
+function selectCasinoChip(val) {
+    if (casinoSpinning) return;
+    casinoSelectedChip = val;
+    playMcClick();
+    renderCasinoChips();
+}
+
+function syncCasinoUI() {
+    // Sync points balance
+    const balEl = document.getElementById('casino-balance-gems');
+    if (balEl) balEl.textContent = (state.points || 0);
+    
+    // Calculate total bets placed
+    let totalBet = 0;
+    
+    const activeKeys = ['red', 'black', 'n-0'];
+    activeKeys.forEach(key => {
+        const amount = casinoBets[key] || 0;
+        totalBet += amount;
+        
+        const badge = document.getElementById(`bet-badge-${key}`);
+        if (badge) {
+            if (amount > 0) {
+                badge.textContent = `${amount} 💎`;
+                badge.style.display = 'block';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+        
+        // Style active cells
+        const cellEl = document.querySelector(`[onclick="placeCasinoBet('${key}')"]`);
+        if (cellEl) {
+            if (amount > 0) {
+                cellEl.style.border = '2.5px solid #fbbf24';
+                cellEl.style.boxShadow = '0 0 20px rgba(251,191,36,0.45)';
+                cellEl.style.transform = 'scale(1.02)';
+            } else {
+                if (key === 'red') {
+                    cellEl.style.border = '2px solid rgba(220, 38, 38, 0.45)';
+                    cellEl.style.boxShadow = '0 0 15px rgba(220, 38, 38, 0.1)';
+                } else if (key === 'black') {
+                    cellEl.style.border = '2px solid rgba(168, 85, 247, 0.45)';
+                    cellEl.style.boxShadow = '0 0 15px rgba(168, 85, 247, 0.1)';
+                } else if (key === 'n-0') {
+                    cellEl.style.border = '2px solid rgba(34, 197, 94, 0.45)';
+                    cellEl.style.boxShadow = '0 0 15px rgba(22, 163, 74, 0.1)';
+                }
+                cellEl.style.transform = 'none';
+            }
+        }
+    });
+    
+    const totalBetEl = document.getElementById('casino-total-bet');
+    if (totalBetEl) totalBetEl.textContent = totalBet;
+}
+
+function placeCasinoBet(cellKey) {
+    if (casinoSpinning) return;
+    
+    // Solo permitir apuestas en Rojo, Negro y Verde (n-0)
+    if (cellKey !== 'red' && cellKey !== 'black' && cellKey !== 'n-0') {
+        return;
+    }
+    
+    if ((state.points || 0) < casinoSelectedChip) {
+        showToast('⚠️ No tienes suficientes Gemas.');
+        return;
+    }
+    
+    // Deduct points
+    saveUserPoints(state.points - casinoSelectedChip);
+    
+    // Record bet
+    casinoBets[cellKey] = (casinoBets[cellKey] || 0) + casinoSelectedChip;
+    
+    playMcClick();
+    syncCasinoUI();
+}
+
+function clearCasinoBets() {
+    if (casinoSpinning) return;
+    
+    let totalRefund = 0;
+    Object.values(casinoBets).forEach(val => {
+        totalRefund += val;
+    });
+    
+    if (totalRefund > 0) {
+        saveUserPoints(state.points + totalRefund);
+        casinoBets = {};
+        playMcClick();
+        syncCasinoUI();
+    }
+}
+
+function doubleCasinoBets() {
+    if (casinoSpinning) return;
+    
+    let totalBet = 0;
+    Object.values(casinoBets).forEach(val => {
+        totalBet += val;
+    });
+    
+    if (totalBet === 0) return;
+    
+    if ((state.points || 0) < totalBet) {
+        showToast('⚠️ No tienes suficientes Gemas para duplicar tus apuestas.');
+        return;
+    }
+    
+    // Deduct points equal to original bet
+    saveUserPoints(state.points - totalBet);
+    
+    // Double bets
+    Object.keys(casinoBets).forEach(key => {
+        casinoBets[key] *= 2;
+    });
+    
+    playMcClick();
+    syncCasinoUI();
+}
+
+function repeatLastCasinoBet() {
+    if (casinoSpinning) return;
+    
+    let lastTotal = 0;
+    Object.values(casinoLastBets).forEach(val => {
+        lastTotal += val;
+    });
+    
+    if (lastTotal === 0) {
+        showToast('⚠️ No hay apuestas anteriores guardadas.');
+        return;
+    }
+    
+    if ((state.points || 0) < lastTotal) {
+        showToast('⚠️ No tienes suficientes Gemas para repetir la última apuesta.');
+        return;
+    }
+    
+    // Return current bets to balance first
+    let currentRefund = 0;
+    Object.values(casinoBets).forEach(val => {
+        currentRefund += val;
+    });
+    
+    saveUserPoints(state.points + currentRefund);
+    
+    // Place last bets
+    saveUserPoints(state.points - lastTotal);
+    casinoBets = JSON.parse(JSON.stringify(casinoLastBets));
+    
+    playMcClick();
+    syncCasinoUI();
+}
+
+function calcCasinoWin(key, result, bet) {
+    const isRed = CASINO_RED.has(result);
+    const isBlack = result !== 0 && !isRed;
+    
+    if (key === 'red') return isRed ? bet * 2 : 0;
+    if (key === 'black') return isBlack ? bet * 2 : 0;
+    if (key === 'n-0') return result === 0 ? bet * 36 : 0;
+    
+    return 0;
+}
+
+function spinCasinoRoulette() {
+    if (casinoSpinning) return;
+    
+    let totalBet = 0;
+    Object.values(casinoBets).forEach(val => {
+        totalBet += val;
+    });
+    
+    if (totalBet === 0) {
+        showToast('⏳ Coloca al menos una apuesta en el tablero.');
+        return;
+    }
+    
+    casinoSpinning = true;
+    
+    // Save last bets
+    casinoLastBets = JSON.parse(JSON.stringify(casinoBets));
+    
+    // Hide previous results
+    const resultBox = document.getElementById('casino-result-display');
+    const announceBox = document.getElementById('casino-announcement');
+    if (resultBox) resultBox.style.display = 'none';
+    if (announceBox) announceBox.style.display = 'none';
+    
+    // Disable spin button
+    const spinBtn = document.getElementById('casino-spin-btn');
+    if (spinBtn) {
+        spinBtn.disabled = true;
+        spinBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> GIRANDO RULETA...';
+    }
+    
+    // Show ball orbiting
+    const orbit = document.getElementById('casino-ball-orbit');
+    if (orbit) orbit.style.display = 'block';
+    
+    // Random spin result
+    let prizeIndex = Math.floor(Math.random() * 37);
+    let winnerNum = CASINO_WHEEL[prizeIndex];
+    
+    // Si sale Verde (0), limitamos la probabilidad al 0.00001% (1 entre 10,000,000)
+    if (winnerNum === 0) {
+        if (Math.random() > 0.0000001) {
+            // Re-elegir un índice de 1 a 36 (garantiza que sea un número Rojo o Negro)
+            prizeIndex = Math.floor(Math.random() * 36) + 1;
+            winnerNum = CASINO_WHEEL[prizeIndex];
+        }
+    }
+    
+    // Calculate rotation angle
+    const segDeg = 360 / 37;
+    const targetDegree = 360 - (prizeIndex * segDeg + segDeg / 2);
+    const extraSpins = 5 * 360;
+    casinoRotation += extraSpins + (targetDegree - (casinoRotation % 360));
+    
+    const wheelGroup = document.getElementById('casino-wheel-group');
+    if (wheelGroup) {
+        wheelGroup.style.transform = `rotate(${casinoRotation}deg)`;
+    }
+    
+    // Play tick sounds while wheel spins
+    let tickCount = 0;
+    const maxTicks = 18;
+    const tickInterval = setInterval(() => {
+        tickCount++;
+        playMcClick();
+        if (tickCount >= maxTicks) clearInterval(tickInterval);
+    }, 240);
+    
+    setTimeout(() => {
+        casinoSpinning = false;
+        
+        // Hide ball orbiting
+        if (orbit) orbit.style.display = 'none';
+        
+        // Calculate payout
+        let totalWin = 0;
+        Object.entries(casinoBets).forEach(([key, amt]) => {
+            totalWin += calcCasinoWin(key, winnerNum, amt);
+        });
+        
+        // Add win to balance
+        if (totalWin > 0) {
+            saveUserPoints(state.points + totalWin);
+        }
+        
+        // Clear bets
+        casinoBets = {};
+        
+        // Sound and visuals
+        if (totalWin > 0) {
+            playVictoryFanfare();
+            triggerConfetti();
+        } else {
+            playMcClick();
+        }
+        
+        // Show winning result display
+        if (resultBox) {
+            const winnerText = document.getElementById('casino-winner-number');
+            const winnerDetails = document.getElementById('casino-winner-details');
+            if (winnerText) winnerText.textContent = winnerNum;
+            
+            if (winnerDetails) {
+                const isRed = CASINO_RED.has(winnerNum);
+                if (winnerNum === 0) {
+                    winnerDetails.textContent = 'VERDE';
+                    winnerText.style.borderColor = '#16a34a';
+                    winnerText.style.boxShadow = '0 0 20px rgba(22,163,74,0.6)';
+                } else {
+                    winnerDetails.textContent = `${isRed ? 'ROJO' : 'NEGRO'} · ${winnerNum % 2 === 0 ? 'PAR' : 'IMPAR'}`;
+                    winnerText.style.borderColor = isRed ? '#dc2626' : '#1e1c2b';
+                    winnerText.style.boxShadow = isRed ? '0 0 20px rgba(220,38,38,0.6)' : '0 0 20px rgba(30,28,43,0.6)';
+                }
+            }
+            resultBox.style.display = 'block';
+        }
+        
+        // Show announcement banner
+        if (announceBox) {
+            if (totalWin > 0) {
+                announceBox.innerHTML = `
+                    <div style="font-size: 0.82rem; font-family: var(--font); color: #4ade80; font-weight: bold; letter-spacing: 0.05em;">🎉 ¡ENHORABUENA!</div>
+                    <div style="font-size: 1.15rem; font-family: var(--font); color: #fbbf24; font-weight: 800; margin-top: 2px;">+${totalWin} GEMAS GANADAS</div>
+                `;
+                announceBox.style.background = 'rgba(22,163,74,0.12)';
+                announceBox.style.borderColor = '#22c55e';
+            } else {
+                announceBox.innerHTML = `
+                    <div style="font-size: 0.82rem; font-family: var(--font); color: #f87171; font-weight: bold; letter-spacing: 0.05em;">SIN SUERTE</div>
+                    <div style="font-size: 0.95rem; color: #cfc2d6; font-weight: 600; margin-top: 2px;">Inténtalo de nuevo. ¡Tú puedes!</div>
+                `;
+                announceBox.style.background = 'rgba(220,38,38,0.08)';
+                announceBox.style.borderColor = 'rgba(220,38,38,0.3)';
+            }
+            announceBox.style.display = 'block';
+        }
+        
+        // Reset spin button
+        if (spinBtn) {
+            spinBtn.disabled = false;
+            spinBtn.innerHTML = '🎰 GIRAR RULETA';
+        }
+        
+        // Post activity to community ticker
+        const user = state.username || 'Invitado';
+        if (totalWin > 0) {
+            pushMarketActivity(`<strong>${user}</strong> ganó <strong>+${totalWin} Gemas</strong> en el Casino Rúnico`, 'fa-solid fa-dice', '#a855f7');
+        } else {
+            pushMarketActivity(`<strong>${user}</strong> apostó <strong>${totalBet} Gemas</strong> en el Casino Rúnico`, 'fa-solid fa-dice', '#64748b');
+        }
+        
+        syncCasinoUI();
+    }, 5300);
 }
 

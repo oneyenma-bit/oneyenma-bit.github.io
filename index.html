@@ -57,11 +57,6 @@
                     <span class="inbox-badge-floating" id="inbox-badge" style="display: none; position: absolute; top: -3px; right: -3px; background: #ef4444; color: white; font-size: 0.62rem; font-weight: 800; padding: 2px 6px; border-radius: 10px; border: 1.5px solid #0e0a17; line-height: 1;">0</span>
                 </button>
 
-                <!-- Profile Settings & Frame Gear Button -->
-                <button class="nav-icon-btn" id="nav-settings-btn" onclick="openUserProfileModal(state.username || 'Invitado')" title="Configuración de Perfil y Marcos" style="border: 1px solid rgba(168, 85, 247, 0.4); background: rgba(168, 85, 247, 0.15); display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 50%; color: #c084fc; font-size: 1.1rem; transition: all 0.3s ease; cursor: pointer; box-shadow: 0 0 10px rgba(168, 85, 247, 0.2);">
-                    <i class="fa-solid fa-gear" style="font-size: 1rem;"></i>
-                </button>
-
                 <!-- Unified Profile & Gems Card -->
                 <div class="user-pill-unified" id="user-pill-unified" onclick="onUserPillClick()" title="Perfil y Configuración de Obsidian SMP" style="display: inline-flex; align-items: center; gap: 8px; background: linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%); border: 1px solid rgba(255,255,255,0.1); padding: 4px 12px 4px 6px; border-radius: 9999px; cursor: pointer; transition: all 0.3s ease;">
                     <div id="nav-avatar-wrap" style="display:inline-flex; align-items:center; justify-content:center;">
@@ -100,6 +95,9 @@
             </button>
             <button class="cat-tab factions-cat-tab" id="tab-facciones" data-tab="facciones" onclick="switchTab('facciones')">
                 <i class="fa-solid fa-flag"></i> FACCIONES (CLANES)
+            </button>
+            <button class="cat-tab casino-cat-tab" id="tab-casino" data-tab="casino" onclick="switchTab('casino')" style="background: linear-gradient(135deg, rgba(139, 92, 246, 0.3) 0%, rgba(109, 40, 217, 0.2) 100%); border: 1px solid rgba(168, 85, 247, 0.5); color: #f5f3ff;">
+                <i class="fa-solid fa-dice" style="color: #a855f7; font-size: 1rem;"></i> CASINO
             </button>
             <button class="cat-tab roulette-cat-tab" id="tab-ruleta" onclick="openModal('modal-daily-roulette')" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.25) 0%, rgba(217, 119, 6, 0.15) 100%); border: 1px solid rgba(245, 158, 11, 0.5); color: #fef08a;">
                 <i class="fa-solid fa-gift" style="color: #f59e0b; font-size: 1rem; animation: pulseLogo 2s infinite;"></i> RULETA DIARIA
@@ -697,6 +695,161 @@
             </div>
         </section>
 
+        <!-- ==================== VISTA 8: CASINO RÚNICO ==================== -->
+        <section class="view-section" id="view-casino" style="display:none; position: relative; max-width: 1240px; margin: 0 auto;">
+            
+            <!-- Casino Hero Header Banner -->
+            <div class="factions-hero-banner" style="background-image: url('img/fac_bg_castle.png'); margin-bottom: 1.5rem;">
+                <div class="fh-overlay" style="background: linear-gradient(to bottom, rgba(10, 6, 18, 0.4), rgba(22, 17, 30, 0.95));"></div>
+                <div class="fh-content">
+                    <h2><i class="fa-solid fa-dice" style="color: #a855f7;"></i> CASINO RÚNICO</h2>
+                    <p>¡Multiplica tus Gemas en la Ruleta Europea! Apuesta al color de la suerte, a docenas o a tus números preferidos.</p>
+                </div>
+            </div>
+
+            <!-- Casino Content Layout -->
+            <div class="casino-main-layout">
+                
+                <!-- Left: Wheel Section -->
+                <div class="glass-panel" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; border-radius: 12px;">
+                    
+                    <!-- SVG Wheel Container -->
+                    <div class="wheel-outer-wrap">
+                        <!-- Orbiting ball container -->
+                        <div id="casino-ball-orbit" class="ball-orbit-container" style="display: none;">
+                            <div class="casino-ball"></div>
+                        </div>
+                        
+                        <!-- Wheel SVG -->
+                        <svg id="casino-wheel-svg" width="330" height="330" viewBox="0 0 350 350" class="casino-wheel-svg" style="pointer-events: none;">
+                            <!-- Outer decorative rings -->
+                            <circle cx="175" cy="175" r="174" fill="#0d0d24" stroke="#fbbf24" stroke-width="2" />
+                            <circle cx="175" cy="175" r="168" fill="transparent" stroke="rgba(251,191,36,0.2)" stroke-width="1" />
+                            
+                            <!-- The rotating wheel group -->
+                            <g id="casino-wheel-group" class="wheel-group">
+                                <!-- Generated dynamically by JS to avoid huge HTML boilerplate -->
+                            </g>
+
+                            <!-- Pointer Needle (static) -->
+                            <polygon points="175,3 166,21 184,21" fill="#f59e0b" style="filter: drop-shadow(0 0 8px rgba(245,158,11,0.9));" />
+                            
+                            <!-- Center cap -->
+                            <circle cx="175" cy="175" r="48" fill="#08081a" stroke="#fbbf24" stroke-width="2" />
+                            <text x="175" y="182" text-anchor="middle" font-size="24">💎</text>
+                        </svg>
+                    </div>
+
+                    <!-- Winner Result Display -->
+                    <div id="casino-result-display" class="casino-result-box" style="display: none;">
+                        <div class="result-label">NÚMERO GANADOR</div>
+                        <div id="casino-winner-number" class="result-number">0</div>
+                        <div id="casino-winner-details" class="result-details">VERDE</div>
+                    </div>
+
+                    <!-- Win/Loss Announcement Box -->
+                    <div id="casino-announcement" class="casino-announcement-box" style="display: none;">
+                        <!-- Updated dynamically -->
+                    </div>
+                </div>
+
+                <!-- Right: Betting and Instructions -->
+                <div class="glass-panel" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; border-radius: 12px;">
+                    
+                    <!-- Balance Display & Quick Instructions -->
+                    <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 1rem; align-items: start;">
+                        <!-- Balance Card -->
+                        <div class="casino-subpanel" style="background: rgba(168, 85, 247, 0.08); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 8px; padding: 0.8rem;">
+                            <span class="subpanel-title"><i class="fa-solid fa-gem" style="color: #fbbf24;"></i> TUS GEMAS</span>
+                            <div class="balance-amount-wrap" style="display: flex; align-items: center; gap: 6px; margin-top: 4px;">
+                                <span class="balance-gems" id="casino-balance-gems" style="font-family: var(--font); font-size: 1.5rem; font-weight: 800; color: #fff;">0</span>
+                                <span style="font-size: 1.2rem; color: #a78bfa;">💎</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Instructions Card -->
+                        <div class="casino-subpanel" style="background: rgba(22, 17, 30, 0.4); border: 1px solid rgba(139, 92, 246, 0.2); border-radius: 8px; padding: 0.8rem; font-size: 0.8rem; line-height: 1.4;">
+                            <span class="subpanel-title"><i class="fa-solid fa-circle-info" style="color: #60a5fa;"></i> CÓMO JUGAR</span>
+                            <ol style="margin-left: 1.2rem; margin-top: 4px; padding-left: 0; color: #cfc2d6;">
+                                <li>Elige una <strong>gema de apuesta</strong> abajo.</li>
+                                <li>Apuesta al <strong>Rojo, Negro o Verde (0)</strong> pulsando en las tarjetas.</li>
+                                <li>Presiona <strong>🎰 GIRAR RULETA</strong> y ¡suerte!</li>
+                            </ol>
+                        </div>
+                    </div>
+
+                    <!-- Chip Selector -->
+                    <div class="casino-subpanel" style="display: flex; flex-direction: column; gap: 6px;">
+                        <span class="subpanel-title" style="font-size: 0.72rem; color: #a78bfa; font-weight: 700; letter-spacing: 0.05em;">1. SELECCIONA LA GEMA DE APUESTA</span>
+                        <div class="chip-container" id="casino-chip-selector" style="display: flex; gap: 10px; flex-wrap: wrap;">
+                            <!-- Generated dynamically by JS -->
+                        </div>
+                    </div>
+
+                    <!-- Simplified Board (Rojo, Verde/0, Negro) -->
+                    <div class="casino-subpanel" style="display: flex; flex-direction: column; gap: 12px; padding: 15px;">
+                        <span class="subpanel-title" style="font-size: 0.75rem; color: #c084fc; font-weight: 800; letter-spacing: 0.08em; text-align: center; text-transform: uppercase;">2. SELECCIONA DÓNDE APOSTAR</span>
+                        
+                        <div class="simplified-board-layout" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+                            <!-- Zone Red -->
+                            <button class="board-cell cell-color-red" onclick="placeCasinoBet('red')" style="position: relative; background: linear-gradient(135deg, rgba(220, 38, 38, 0.25) 0%, rgba(220, 38, 38, 0.05) 100%); border: 2px solid rgba(220, 38, 38, 0.45); padding: 22px 10px; border-radius: 12px; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 0 15px rgba(220, 38, 38, 0.1);">
+                                <span style="font-size: 1.8rem; filter: drop-shadow(0 0 8px #ef4444);">🔴</span>
+                                <span style="font-size: 0.95rem; font-weight: 800; letter-spacing: 0.05em; text-shadow: 0 0 10px rgba(220, 38, 38, 0.6);">ROJO</span>
+                                <span style="font-size: 0.72rem; color: rgba(255, 255, 255, 0.6); font-weight: bold; background: rgba(0,0,0,0.3); padding: 2px 8px; border-radius: 9999px;">Paga 2x</span>
+                                <div class="cell-bet-badge" id="bet-badge-red" style="display:none; position: absolute; top: -8px; right: -4px; background: #fbbf24; color: #111; font-size: 0.7rem; font-weight: 900; border-radius: 12px; padding: 2px 8px; border: 1.5px solid #fff; box-shadow: 0 0 10px rgba(251,191,36,0.8); z-index: 10;">0</div>
+                            </button>
+
+                            <!-- Zone Green -->
+                            <button class="board-cell cell-color-green" onclick="placeCasinoBet('n-0')" style="position: relative; background: linear-gradient(135deg, rgba(22, 163, 74, 0.25) 0%, rgba(22, 163, 74, 0.05) 100%); border: 2px solid rgba(34, 197, 94, 0.45); padding: 22px 10px; border-radius: 12px; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 0 15px rgba(22, 163, 74, 0.1);">
+                                <span style="font-size: 1.8rem; filter: drop-shadow(0 0 8px #22c55e);">🟢</span>
+                                <span style="font-size: 0.95rem; font-weight: 800; letter-spacing: 0.05em; text-shadow: 0 0 10px rgba(34, 197, 94, 0.6);">VERDE (0)</span>
+                                <span style="font-size: 0.72rem; color: rgba(255, 255, 255, 0.6); font-weight: bold; background: rgba(0,0,0,0.3); padding: 2px 8px; border-radius: 9999px;">Paga 36x</span>
+                                <div class="cell-bet-badge" id="bet-badge-n-0" style="display:none; position: absolute; top: -8px; right: -4px; background: #fbbf24; color: #111; font-size: 0.7rem; font-weight: 900; border-radius: 12px; padding: 2px 8px; border: 1.5px solid #fff; box-shadow: 0 0 10px rgba(251,191,36,0.8); z-index: 10;">0</div>
+                            </button>
+
+                            <!-- Zone Black -->
+                            <button class="board-cell cell-color-black" onclick="placeCasinoBet('black')" style="position: relative; background: linear-gradient(135deg, rgba(168, 85, 247, 0.15) 0%, rgba(15, 12, 30, 0.3) 100%); border: 2px solid rgba(168, 85, 247, 0.45); padding: 22px 10px; border-radius: 12px; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 0 15px rgba(168, 85, 247, 0.1);">
+                                <span style="font-size: 1.8rem; filter: drop-shadow(0 0 8px #a855f7);">⚫</span>
+                                <span style="font-size: 0.95rem; font-weight: 800; letter-spacing: 0.05em; text-shadow: 0 0 10px rgba(168, 85, 247, 0.6);">NEGRO</span>
+                                <span style="font-size: 0.72rem; color: rgba(255, 255, 255, 0.6); font-weight: bold; background: rgba(0,0,0,0.3); padding: 2px 8px; border-radius: 9999px;">Paga 2x</span>
+                                <div class="cell-bet-badge" id="bet-badge-black" style="display:none; position: absolute; top: -8px; right: -4px; background: #fbbf24; color: #111; font-size: 0.7rem; font-weight: 900; border-radius: 12px; padding: 2px 8px; border: 1.5px solid #fff; box-shadow: 0 0 10px rgba(251,191,36,0.8); z-index: 10;">0</div>
+                            </button>
+                        </div>
+                    </div>
+                    <!-- Bet Summary & Actions -->
+                    <div class="casino-subpanel" style="background: rgba(22, 17, 30, 0.5); border: 1px solid rgba(139, 92, 246, 0.25); border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 0.75rem; color: #a78bfa; font-weight: 700; letter-spacing: 0.1em;">APUESTA TOTAL</span>
+                            <div style="display: flex; align-items: center; gap: 4px;">
+                                <span class="total-bet-amount" id="casino-total-bet" style="font-family: var(--font); font-size: 1.25rem; font-weight: 800; color: #fbbf24;">0</span>
+                                <span style="color: #fbbf24; font-weight: bold; font-size: 1.1rem;">💎</span>
+                            </div>
+                        </div>
+
+                        <!-- Quick Actions -->
+                        <div class="bet-quick-actions" style="display: flex; gap: 8px;">
+                            <button class="btn-mc btn-red-mc" onclick="clearCasinoBets()" style="flex: 1; padding: 6px 0; font-size: 0.75rem;">
+                                <i class="fa-solid fa-trash"></i> Limpiar
+                            </button>
+                            <button class="btn-mc btn-purple-mc" onclick="doubleCasinoBets()" style="flex: 1; padding: 6px 0; font-size: 0.75rem;">
+                                <i class="fa-solid fa-angles-up"></i> Duplicar
+                            </button>
+                            <button class="btn-mc btn-purple-mc" onclick="repeatLastCasinoBet()" style="flex: 1; padding: 6px 0; font-size: 0.75rem;">
+                                <i class="fa-solid fa-rotate-left"></i> Repetir
+                            </button>
+                        </div>
+
+                        <!-- Spin Button -->
+                        <button id="casino-spin-btn" class="btn-mc btn-green-mc" onclick="spinCasinoRoulette()" style="width: 100%; padding: 12px 0; font-size: 1rem; font-family: var(--font); box-shadow: 0 0 15px rgba(34, 197, 94, 0.2);">
+                            🎰 GIRAR RULETA
+                        </button>
+                    </div>
+
+                </div>
+            </div>
+
+        </section>
+
     </div>
 
     <!-- ===== FOOTER ===== -->
@@ -1049,10 +1202,6 @@
                 <h4 style="color: white; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.3rem; margin-bottom: 0.8rem; font-size: 0.88rem; text-align: left; font-weight: 800; letter-spacing: 0.5px;"><i class="fa-solid fa-sliders"></i> CONFIGURACIONES DE LA PÁGINA</h4>
                 
                 <!-- Settings Options -->
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.7rem; font-size: 0.82rem; text-align: left; color: var(--text-muted); font-weight: 600;">
-                    <span><i class="fa-solid fa-volume-high" style="color: var(--primary); margin-right: 4px;"></i> Sonido de Clics Minecraft</span>
-                    <button class="bedrock-toggle setting-sound-btn" onclick="toggleSetting('sound')" style="padding: 0.2rem 0.8rem; font-size: 0.72rem; width: 50px;">Sí</button>
-                </div>
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.2rem; font-size: 0.82rem; text-align: left; color: var(--text-muted); font-weight: 600;">
                     <span><i class="fa-solid fa-sparkles" style="color: var(--primary); margin-right: 4px;"></i> Partículas de Fondo</span>
                     <button class="bedrock-toggle setting-particles-btn" onclick="toggleSetting('particles')" style="padding: 0.2rem 0.8rem; font-size: 0.72rem; width: 50px;">Sí</button>
@@ -1588,10 +1737,6 @@
 
                     <div class="prf-section">
                         <h4><i class="fa-solid fa-sliders"></i> Preferencias de la Aplicación</h4>
-                        <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); padding: 0.8rem 1rem; border-radius: 10px; margin-bottom: 0.6rem;">
-                            <span style="font-size:0.83rem; color:var(--text-muted); font-weight:600;"><i class="fa-solid fa-volume-high" style="color: var(--primary); margin-right: 6px;"></i> Sonido de Clics Minecraft</span>
-                            <button class="bedrock-toggle setting-sound-btn" onclick="toggleSetting('sound')" style="padding: 0.2rem 0.8rem; font-size: 0.72rem; width: 50px;">Sí</button>
-                        </div>
                         <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); padding: 0.8rem 1rem; border-radius: 10px;">
                             <span style="font-size:0.83rem; color:var(--text-muted); font-weight:600;"><i class="fa-solid fa-sparkles" style="color: var(--primary); margin-right: 6px;"></i> Partículas de Fondo</span>
                             <button class="bedrock-toggle setting-particles-btn" onclick="toggleSetting('particles')" style="padding: 0.2rem 0.8rem; font-size: 0.72rem; width: 50px;">Sí</button>

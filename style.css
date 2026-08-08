@@ -5874,4 +5874,233 @@ input:focus, textarea:focus, select:focus {
     animation: popIn 0.3s ease;
 }
 
+/* ============================================================
+   CASINO RÚNICO STYLING
+   ============================================================ */
+.casino-main-layout {
+    display: grid;
+    grid-template-columns: 1fr 1.25fr;
+    gap: 1.5rem;
+    align-items: start;
+    width: 100%;
+    margin-bottom: 2rem;
+}
+
+@media (max-width: 992px) {
+    .casino-main-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+.wheel-outer-wrap {
+    position: relative;
+    width: 330px;
+    height: 330px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.casino-wheel-svg {
+    width: 100%;
+    height: 100%;
+    transition: transform 5.1s cubic-bezier(0.22, 1, 0.36, 1);
+    pointer-events: none;
+}
+
+.wheel-group {
+    transform-origin: 175px 175px;
+}
+
+.ball-orbit-container {
+    position: absolute;
+    width: 330px;
+    height: 330px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    pointer-events: none;
+    animation: orbit 0.4s linear infinite;
+}
+
+.casino-ball {
+    position: absolute;
+    top: 26px;
+    left: calc(50% - 6px);
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #ffffff 0%, #e5e5d8 50%, #b5b29b 100%);
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.95);
+}
+
+@keyframes orbit {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+.casino-result-box {
+    margin-top: 1.5rem;
+    text-align: center;
+    animation: fadeUp 0.4s ease;
+}
+
+.result-label {
+    font-size: 0.65rem;
+    color: #8b8ea9;
+    letter-spacing: 0.15rem;
+    font-weight: 800;
+    margin-bottom: 6px;
+}
+
+.result-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    background: #090918;
+    border: 3.5px solid #fbbf24;
+    color: #fff;
+    font-family: var(--font);
+    font-size: 1.6rem;
+    font-weight: 900;
+}
+
+.result-details {
+    margin-top: 6px;
+    font-size: 0.8rem;
+    font-weight: 800;
+    letter-spacing: 0.05rem;
+}
+
+.casino-announcement-box {
+    margin-top: 1.25rem;
+    width: 100%;
+    max-width: 320px;
+    border-radius: 8px;
+    border: 1.5px solid;
+    padding: 12px;
+    text-align: center;
+    animation: fadeUp 0.3s ease;
+    box-sizing: border-box;
+}
+
+.casino-subpanel {
+    background: rgba(22, 17, 30, 0.3);
+    border: 1px solid rgba(139, 92, 246, 0.15);
+    border-radius: 8px;
+    padding: 10px;
+}
+
+.subpanel-title {
+    display: block;
+    font-size: 0.65rem;
+    color: #8b8ea9;
+    font-weight: 800;
+    letter-spacing: 0.08rem;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+}
+
+.board-cell {
+    font-family: var(--font);
+    border: none;
+    border-radius: 6px;
+    color: #fff;
+    font-weight: 800;
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: all 0.12s ease;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+    user-select: none;
+}
+
+.board-cell:hover {
+    filter: brightness(1.15);
+    transform: scale(1.02);
+}
+
+.board-cell:active {
+    transform: scale(0.98);
+}
+
+.cell-bet-badge {
+    pointer-events: none;
+}
+
+.bet-quick-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.bet-quick-actions button {
+    font-weight: 800;
+    letter-spacing: 0.05rem;
+}
+
+.board-numbers-grid {
+    animation: fadeUp 0.35s ease;
+}
+
+
+.wheel-segment-group text {
+    font-family: var(--font);
+    font-weight: 800;
+}
+
+/* Premium Gem Chips Hover and Float animations */
+@keyframes floatGem {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-5px); }
+}
+
+.gem-chip-btn:hover {
+    transform: translateY(-6px) scale(1.08) !important;
+    border-color: rgba(255, 255, 255, 0.45) !important;
+    filter: brightness(1.2);
+}
+
+.gem-chip-btn:active {
+    transform: scale(0.95) !important;
+}
+
+/* Specific glows for hover state of active/inactive chips */
+.gem-chip-btn[onclick*="10"]:hover {
+    box-shadow: 0 8px 24px rgba(59, 130, 246, 0.6) !important;
+}
+.gem-chip-btn[onclick*="50"]:hover {
+    box-shadow: 0 8px 24px rgba(16, 185, 129, 0.6) !important;
+}
+.gem-chip-btn[onclick*="100"]:hover {
+    box-shadow: 0 8px 24px rgba(168, 85, 247, 0.6) !important;
+}
+.gem-chip-btn[onclick*="500"]:hover {
+    box-shadow: 0 8px 24px rgba(245, 158, 11, 0.6) !important;
+}
+.gem-chip-btn[onclick*="1000"]:hover {
+    box-shadow: 0 8px 24px rgba(239, 68, 68, 0.6) !important;
+}
+
+/* Glow animations for Simplified Betting Cards */
+.cell-color-red:hover {
+    box-shadow: 0 0 25px rgba(220, 38, 38, 0.5) !important;
+    border-color: rgba(239, 68, 68, 0.8) !important;
+}
+.cell-color-green:hover {
+    box-shadow: 0 0 25px rgba(34, 197, 94, 0.5) !important;
+    border-color: rgba(74, 222, 128, 0.8) !important;
+}
+.cell-color-black:hover {
+    box-shadow: 0 0 25px rgba(168, 85, 247, 0.5) !important;
+    border-color: rgba(192, 132, 252, 0.8) !important;
+}
+
+
 
