@@ -6632,48 +6632,99 @@ function spinCasinoRoulette() {
         spinBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> GIRANDO RULETA...';
     }
     
-    // Show ball orbiting
-    const orbit = document.getElementById('casino-ball-orbit');
-    if (orbit) orbit.style.display = 'block';
+    // SVG Ball references
+    const ballGroup = document.getElementById('casino-ball-group');
+    const ballElement = document.getElementById('casino-ball');
+    if (ballGroup) ballGroup.style.display = 'block';
     
-    // Random spin result
+    // Random spin result (0 to 36) - No suppression of 0 (green)
     let prizeIndex = Math.floor(Math.random() * 37);
     let winnerNum = CASINO_WHEEL[prizeIndex];
-    
-    // Si sale Verde (0), limitamos la probabilidad al 0.00001% (1 entre 10,000,000)
-    if (winnerNum === 0) {
-        if (Math.random() > 0.0000001) {
-            // Re-elegir un índice de 1 a 36 (garantiza que sea un número Rojo o Negro)
-            prizeIndex = Math.floor(Math.random() * 36) + 1;
-            winnerNum = CASINO_WHEEL[prizeIndex];
-        }
-    }
     
     // Calculate rotation angle
     const segDeg = 360 / 37;
     const targetDegree = 360 - (prizeIndex * segDeg + segDeg / 2);
     const extraSpins = 5 * 360;
-    casinoRotation += extraSpins + (targetDegree - (casinoRotation % 360));
+    
+    const wheelStart = casinoRotation;
+    const wheelEnd = wheelStart + extraSpins + (targetDegree - (wheelStart % 360));
+    casinoRotation = wheelEnd;
+    
+    // Ball angles
+    const segmentAngle = prizeIndex * segDeg + segDeg / 2;
+    const ballStart = Math.random() * 360;
+    const ballEnd = (wheelEnd + segmentAngle) - (8 * 360); // 8 full spins counter-clockwise
+    
+    const duration = 5000;
+    const startTime = performance.now();
     
     const wheelGroup = document.getElementById('casino-wheel-group');
-    if (wheelGroup) {
-        wheelGroup.style.transform = `rotate(${casinoRotation}deg)`;
+    
+    let lastRelativeSegment = -1;
+    let lastTickTime = 0;
+    
+    function animateCasino(now) {
+        const elapsed = now - startTime;
+        const p = Math.min(elapsed / duration, 1);
+        
+        // Easing functions
+        const pWheel = 1 - Math.pow(1 - p, 4); // Quartic ease out
+        const pBall = 1 - Math.pow(1 - p, 3);  // Cubic ease out
+        
+        // Update wheel rotation
+        const currentWheelAngle = wheelStart + (wheelEnd - wheelStart) * pWheel;
+        if (wheelGroup) {
+            wheelGroup.style.transform = `rotate(${currentWheelAngle}deg)`;
+        }
+        
+        // Update ball angle
+        let currentBallAngle = ballStart + (ballEnd - ballStart) * pBall;
+        
+        // Calculate ball radius (outer rim = 138, pocket = 110)
+        let radius = 138;
+        if (p > 0.4) {
+            // Spiral inward from t = 40% to 90%
+            const pSpiral = Math.min((p - 0.4) / 0.5, 1);
+            const pSpiralEase = 1 - Math.pow(1 - pSpiral, 3);
+            radius = 138 - (138 - 110) * pSpiralEase;
+            
+            // Physical bounce inside pocket from t = 75% to 100%
+            if (p > 0.75) {
+                const pBounce = (p - 0.75) / 0.25; // 0 to 1
+                // Add a decreasing radial and angular bounce
+                const bounceRad = Math.sin(pBounce * Math.PI * 4.5) * 5 * (1 - pBounce);
+                const bounceAng = Math.cos(pBounce * Math.PI * 4.5) * 6 * (1 - pBounce);
+                radius += bounceRad;
+                currentBallAngle += bounceAng;
+            }
+        }
+        
+        // Update SVG ball elements
+        if (ballGroup && ballElement) {
+            ballGroup.style.transform = `rotate(${currentBallAngle}deg)`;
+            ballElement.setAttribute('cy', 175 - radius);
+        }
+        
+        // Play tick sound when ball passes a segment (capped to 60ms throttle)
+        const currentRelativeAngle = Math.abs(Math.floor((currentBallAngle - currentWheelAngle) / segDeg));
+        const nowTime = performance.now();
+        if (currentRelativeAngle !== lastRelativeSegment) {
+            if (p < 0.9 && (nowTime - lastTickTime > 60)) {
+                playMcClick();
+                lastTickTime = nowTime;
+            }
+            lastRelativeSegment = currentRelativeAngle;
+        }
+        
+        if (p < 1) {
+            requestAnimationFrame(animateCasino);
+        } else {
+            finalizeSpin();
+        }
     }
     
-    // Play tick sounds while wheel spins
-    let tickCount = 0;
-    const maxTicks = 18;
-    const tickInterval = setInterval(() => {
-        tickCount++;
-        playMcClick();
-        if (tickCount >= maxTicks) clearInterval(tickInterval);
-    }, 240);
-    
-    setTimeout(() => {
+    function finalizeSpin() {
         casinoSpinning = false;
-        
-        // Hide ball orbiting
-        if (orbit) orbit.style.display = 'none';
         
         // Calculate payout
         let totalWin = 0;
@@ -6753,6 +6804,9 @@ function spinCasinoRoulette() {
         }
         
         syncCasinoUI();
-    }, 5300);
+    }
+    
+    // Start animation loop
+    requestAnimationFrame(animateCasino);
 }
 

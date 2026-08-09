@@ -526,8 +526,8 @@
                         <div class="reward-icon"><img src="img/golden_apple.png" alt="Manzana de Notch"></div>
                         <h4>3x Manzanas de Notch Encantadas</h4>
                         <p>Recibe 3 Manzanas Doradas Encantadas (Notch) directo en el juego.</p>
-                        <div class="reward-cost"><i class="fa-solid fa-gem"></i> 200 Gemas</div>
-                        <button class="btn-primary" onclick="redeemReward('apples', 200, '3x Manzanas de Notch Encantadas')">Canjear por 200 Gemas</button>
+                        <div class="reward-cost"><i class="fa-solid fa-gem"></i> 2,000 Gemas</div>
+                        <button class="btn-primary" onclick="redeemReward('apples', 2000, '3x Manzanas de Notch Encantadas')">Canjear por 2,000 Gemas</button>
                     </div>
 
                     <!-- Reward 2: Pack 3x Tótems de Inmortalidad -->
@@ -535,8 +535,8 @@
                         <div class="reward-icon"><img src="img/totem_of_undying.png" alt="Tótem"></div>
                         <h4>Pack 3x Tótems de la Inmortalidad</h4>
                         <p>Recibe 3 Tótems de la Inmortalidad de protección en el juego.</p>
-                        <div class="reward-cost"><i class="fa-solid fa-gem"></i> 500 Gemas</div>
-                        <button class="btn-primary" onclick="redeemReward('totems', 500, 'Pack 3x Tótems de Inmortalidad')">Canjear por 500 Gemas</button>
+                        <div class="reward-cost"><i class="fa-solid fa-gem"></i> 5,000 Gemas</div>
+                        <button class="btn-primary" onclick="redeemReward('totems', 5000, 'Pack 3x Tótems de Inmortalidad')">Canjear por 5,000 Gemas</button>
                     </div>
 
                     <!-- Reward 3: Cupón 30% Descuento en Kits -->
@@ -545,8 +545,8 @@
                         <div class="reward-icon"><i class="fa-solid fa-ticket" style="font-size: 2.2rem; color: #f59e0b; filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.6));"></i></div>
                         <h4>Cupón 30% Descuento (Compra de Kits)</h4>
                         <p>Aplica un 30% de descuento directo en tu próxima compra de cualquier Kit de la Tienda.</p>
-                        <div class="reward-cost"><i class="fa-solid fa-gem"></i> 1000 Gemas</div>
-                        <button class="btn-primary" onclick="redeemReward('coupon30', 1000, 'Cupón 30% Descuento en Kits')">Canjear por 1000 Gemas</button>
+                        <div class="reward-cost"><i class="fa-solid fa-gem"></i> 10,000 Gemas</div>
+                        <button class="btn-primary" onclick="redeemReward('coupon30', 10000, 'Cupón 30% Descuento en Kits')">Canjear por 10,000 Gemas</button>
                     </div>
 
                     <!-- Reward 4: Kit Mítico Netherite -->
@@ -554,8 +554,8 @@
                         <div class="reward-icon"><img src="img/netherite_chestplate.png" alt="Netherite Chestplate"></div>
                         <h4>Kit Mítico Netherite Legendario</h4>
                         <p>Armadura completa Netherite Filo V Protección IV.</p>
-                        <div class="reward-cost"><i class="fa-solid fa-gem"></i> 1500 Gemas</div>
-                        <button class="btn-primary" onclick="redeemReward('netherite', 1500, 'Kit Mítico Netherite')">Canjear por 1500 Gemas</button>
+                        <div class="reward-cost"><i class="fa-solid fa-gem"></i> 15,000 Gemas</div>
+                        <button class="btn-primary" onclick="redeemReward('netherite', 15000, 'Kit Mítico Netherite')">Canjear por 15,000 Gemas</button>
                     </div>
                 </div>
             </div>
@@ -707,13 +707,15 @@
                     
                     <!-- SVG Wheel Container -->
                     <div class="wheel-outer-wrap">
-                        <!-- Orbiting ball container -->
-                        <div id="casino-ball-orbit" class="ball-orbit-container" style="display: none;">
-                            <div class="casino-ball"></div>
-                        </div>
-                        
                         <!-- Wheel SVG -->
                         <svg id="casino-wheel-svg" width="330" height="330" viewBox="0 0 350 350" class="casino-wheel-svg" style="pointer-events: none;">
+                            <defs>
+                                <radialGradient id="casino-ball-gradient" cx="35%" cy="35%" r="65%">
+                                    <stop offset="0%" stop-color="#ffffff" />
+                                    <stop offset="60%" stop-color="#e5e5d8" />
+                                    <stop offset="100%" stop-color="#9c9980" />
+                                </radialGradient>
+                            </defs>
                             <!-- Outer decorative rings -->
                             <circle cx="175" cy="175" r="174" fill="#0d0d24" stroke="#fbbf24" stroke-width="2" />
                             <circle cx="175" cy="175" r="168" fill="transparent" stroke="rgba(251,191,36,0.2)" stroke-width="1" />
@@ -723,8 +725,12 @@
                                 <!-- Generated dynamically by JS to avoid huge HTML boilerplate -->
                             </g>
 
-                            <!-- Pointer Needle (static) -->
-                            <polygon points="175,3 166,21 184,21" fill="#f59e0b" style="filter: drop-shadow(0 0 8px rgba(245,158,11,0.9));" />
+                            <!-- Pointer Needle removed as per user request -->
+
+                            <!-- The Ball Group -->
+                            <g id="casino-ball-group" style="transform-origin: 175px 175px; display: none;">
+                                <circle id="casino-ball" cx="175" cy="37" r="6.5" fill="url(#casino-ball-gradient)" style="filter: drop-shadow(0 0 5px rgba(255,255,255,0.85));" />
+                            </g>
                             
                             <!-- Center cap -->
                             <circle cx="175" cy="175" r="48" fill="#08081a" stroke="#fbbf24" stroke-width="2" />
@@ -1330,47 +1336,47 @@
             <button class="modal-close" onclick="closeModal('modal-points')">&times;</button>
             <div class="points-modal-header">
                 <div class="points-title-wrap">
-                    <h3><i class="fa-solid fa-gem"></i> Tienda de Puntos Obsidian</h3>
-                    <p>Gana 100 Puntos por cada $1 USD gastado en la tienda y canjéalas por recompensas exclusivas</p>
+                    <h3><i class="fa-solid fa-gem"></i> Tienda de Gemas Obsidian</h3>
+                    <p>Gana 100 Gemas por cada $1 USD gastado en la tienda y canjéalas por recompensas exclusivas</p>
                 </div>
                 <div class="points-balance-card">
-                    <span class="pbc-label">Tus Puntos:</span>
+                    <span class="pbc-label">Tus Gemas:</span>
                     <span class="pbc-val" id="points-modal-balance">0</span> <i class="fa-solid fa-gem"></i>
                 </div>
             </div>
             <div class="rewards-grid">
                 <!-- Reward 1 -->
                 <div class="reward-card">
-                    <div class="reward-icon"><i class="fa-solid fa-apple-whole"></i></div>
-                    <h4>Caja de Manzanas Encantadas</h4>
-                    <p>Recibe 16 Manzanas de Notch directo en el servidor.</p>
-                    <div class="reward-cost"><i class="fa-solid fa-gem"></i> 200 Puntos</div>
-                    <button class="btn-primary" onclick="redeemReward('apples', 200, 'Caja de Manzanas Encantadas')">Canjear</button>
+                     <div class="reward-icon"><i class="fa-solid fa-apple-whole"></i></div>
+                     <h4>Caja de Manzanas Encantadas</h4>
+                     <p>Recibe 16 Manzanas de Notch directo en el servidor.</p>
+                     <div class="reward-cost"><i class="fa-solid fa-gem"></i> 2,000 Gemas</div>
+                     <button class="btn-primary" onclick="redeemReward('apples', 2000, 'Caja de Manzanas Encantadas')">Canjear</button>
                 </div>
                 <!-- Reward 2 -->
                 <div class="reward-card">
-                    <div class="reward-icon"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
-                    <h4>Cosmético Partículas Neón</h4>
-                    <p>Aura neón púrpura exclusiva alrededor de tu personaje.</p>
-                    <div class="reward-cost"><i class="fa-solid fa-gem"></i> 500 Puntos</div>
-                    <button class="btn-primary" onclick="redeemReward('particles', 500, 'Cosmético Partículas Neón')">Canjear</button>
+                     <div class="reward-icon"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+                     <h4>Cosmético Partículas Neón</h4>
+                     <p>Aura neón púrpura exclusiva alrededor de tu personaje.</p>
+                     <div class="reward-cost"><i class="fa-solid fa-gem"></i> 5,000 Gemas</div>
+                     <button class="btn-primary" onclick="redeemReward('particles', 5000, 'Cosmético Partículas Neón')">Canjear</button>
                 </div>
                 <!-- Reward 3 -->
                 <div class="reward-card popular-reward">
-                    <div class="reward-chip">MÁS POPULAR</div>
-                    <div class="reward-icon"><i class="fa-solid fa-ticket" style="font-size: 2rem; color: #f59e0b;"></i></div>
-                    <h4>Cupón 30% Descuento (Compra de Kits)</h4>
-                    <p>Aplica un 30% de descuento directo en tu próxima compra de cualquier Kit de la Tienda.</p>
-                    <div class="reward-cost"><i class="fa-solid fa-gem"></i> 1000 Gemas</div>
-                    <button class="btn-primary" onclick="redeemReward('coupon30', 1000, 'Cupón 30% Descuento en Kits')">Canjear</button>
+                     <div class="reward-chip">MÁS POPULAR</div>
+                     <div class="reward-icon"><i class="fa-solid fa-ticket" style="font-size: 2rem; color: #f59e0b;"></i></div>
+                     <h4>Cupón 30% Descuento (Compra de Kits)</h4>
+                     <p>Aplica un 30% de descuento directo en tu próxima compra de cualquier Kit de la Tienda.</p>
+                     <div class="reward-cost"><i class="fa-solid fa-gem"></i> 10,000 Gemas</div>
+                     <button class="btn-primary" onclick="redeemReward('coupon30', 10000, 'Cupón 30% Descuento en Kits')">Canjear</button>
                 </div>
                 <!-- Reward 4 -->
                 <div class="reward-card">
-                    <div class="reward-icon"><i class="fa-solid fa-shield-halved"></i></div>
-                    <h4>Kit Mítico Netherite Legendario</h4>
-                    <p>Armadura completa Netherite Filo V Protección IV.</p>
-                    <div class="reward-cost"><i class="fa-solid fa-gem"></i> 1500 Puntos</div>
-                    <button class="btn-primary" onclick="redeemReward('netherite', 1500, 'Kit Mítico Netherite')">Canjear</button>
+                     <div class="reward-icon"><i class="fa-solid fa-shield-halved"></i></div>
+                     <h4>Kit Mítico Netherite Legendario</h4>
+                     <p>Armadura completa Netherite Filo V Protección IV.</p>
+                     <div class="reward-cost"><i class="fa-solid fa-gem"></i> 15,000 Gemas</div>
+                     <button class="btn-primary" onclick="redeemReward('netherite', 15000, 'Kit Mítico Netherite')">Canjear</button>
                 </div>
             </div>
         </div>
