@@ -6165,5 +6165,33 @@ input:focus, textarea:focus, select:focus {
     border-radius: 4px !important;
 }
 
+/* Premium Social Layout & Clan List interactions */
+.member-detail-row:hover {
+    background: rgba(255, 255, 255, 0.04) !important;
+    border-color: rgba(168, 85, 247, 0.3) !important;
+}
+
+.member-name-hover:hover {
+    color: #c084fc !important;
+}
+
+.add-friend-trigger-btn:hover {
+    background: linear-gradient(135deg, rgba(168, 85, 247, 0.3) 0%, rgba(168, 85, 247, 0.08) 100%) !important;
+    border-color: rgba(168, 85, 247, 0.5) !important;
+    box-shadow: 0 0 12px rgba(168, 85, 247, 0.25);
+}
+
+.friend-list-row:hover {
+    background: rgba(255, 255, 255, 0.05) !important;
+}
+
+.add-friend-trigger-btn {
+    transition: all 0.25s ease;
+}
+
+.member-detail-row {
+    transition: all 0.2s ease;
+}
+
 
 

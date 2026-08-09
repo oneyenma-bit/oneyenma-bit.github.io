@@ -129,6 +129,7 @@ if (supabaseClient) {
                 renderChatMessages();
                 updateInboxBadge();
                 if (typeof renderClanChatMessages === 'function') renderClanChatMessages();
+                if (typeof renderSocialPanel === 'function' && currentInboxTab === 'social') renderSocialPanel();
             });
         })
         .subscribe();
@@ -2468,8 +2469,16 @@ function openContactModal(publisher, title, listingId) {
         return;
     }
     const pubName = parsePublisher(publisher).username;
+    
     if (pubName.toLowerCase() === state.username.toLowerCase()) {
         showToast('⚠️ No puedes enviarte un mensaje a ti mismo.');
+        return;
+    }
+    
+    // Validar privacidad de mensajería (mismo clan o amigos)
+    if (!canChatWithUser(pubName)) {
+        showToast(`⚠️ Solo puedes chatear con amigos o compañeros de clan. Envía una solicitud primero.`);
+        openUserProfileModal(pubName);
         return;
     }
     
@@ -2560,30 +2569,106 @@ function setInboxTab(tab) {
     
     const pendBtn = document.getElementById('tab-inbox-pending');
     const actBtn = document.getElementById('tab-inbox-active');
+    const socBtn = document.getElementById('tab-inbox-social');
     
-    if (pendBtn && actBtn) {
-        if (tab === 'pending') {
-            pendBtn.style.background = 'rgba(168,85,247,0.35)';
-            pendBtn.style.color = '#fff';
-            actBtn.style.background = 'transparent';
-            actBtn.style.color = 'var(--text-muted)';
-        } else {
-            actBtn.style.background = 'rgba(168,85,247,0.35)';
-            actBtn.style.color = '#fff';
-            pendBtn.style.background = 'transparent';
-            pendBtn.style.color = 'var(--text-muted)';
-        }
+    if (pendBtn) {
+        pendBtn.style.background = tab === 'pending' ? 'rgba(168,85,247,0.35)' : 'transparent';
+        pendBtn.style.color = tab === 'pending' ? '#fff' : 'var(--text-muted)';
+    }
+    if (actBtn) {
+        actBtn.style.background = tab === 'active' ? 'rgba(168,85,247,0.35)' : 'transparent';
+        actBtn.style.color = tab === 'active' ? '#fff' : 'var(--text-muted)';
+    }
+    if (socBtn) {
+        socBtn.style.background = tab === 'social' ? 'rgba(168,85,247,0.35)' : 'transparent';
+        socBtn.style.color = tab === 'social' ? '#fff' : 'var(--text-muted)';
     }
     
-    activeChatId = null;
-    renderInboxList();
-    renderChatMessages();
+    const socPanel = document.getElementById('social-panel');
+    const chatHeader = document.getElementById('chat-header');
+    const chatMsgs = document.getElementById('chat-messages');
+    const editBanner = document.getElementById('chat-edit-banner');
+    const inputArea = document.getElementById('chat-input-area');
+    
+    if (tab === 'social') {
+        if (socPanel) socPanel.style.display = 'flex';
+        if (chatHeader) chatHeader.style.display = 'none';
+        if (chatMsgs) chatMsgs.style.display = 'none';
+        if (editBanner) editBanner.style.display = 'none';
+        if (inputArea) inputArea.style.display = 'none';
+        
+        activeChatId = null;
+        renderInboxList();
+        renderSocialPanel();
+    } else {
+        if (socPanel) socPanel.style.display = 'none';
+        if (chatHeader) chatHeader.style.display = 'flex';
+        if (chatMsgs) chatMsgs.style.display = 'flex';
+        
+        if (activeChatId) {
+            if (inputArea) inputArea.style.display = 'flex';
+            if (editingMessageIdx !== null && editBanner) editBanner.style.display = 'flex';
+        } else {
+            if (inputArea) inputArea.style.display = 'none';
+        }
+        
+        renderInboxList();
+        renderChatMessages();
+    }
 }
 
 function renderInboxList() {
     const list = document.getElementById('inbox-list');
+    if (!list) return;
+    
+    if (currentInboxTab === 'social') {
+        const friends = state.conversations.filter(c => {
+            if (c.listingId !== 'friendship' || c.status !== 'accepted') return false;
+            const b = c.buyer.toLowerCase();
+            const s = c.seller.toLowerCase();
+            const u = state.username.toLowerCase();
+            return (b === u || s === u);
+        });
+        
+        let friendsListHtml = '';
+        if (friends.length === 0) {
+            friendsListHtml = `<div style="padding:1rem;color:var(--text-muted);text-align:center;font-size:0.8rem;font-family:var(--font);">Aún no tienes amigos agregados.</div>`;
+        } else {
+            friendsListHtml = friends.map(f => {
+                const bName = f.buyer;
+                const sName = f.seller;
+                const otherUser = bName.toLowerCase() === state.username.toLowerCase() ? sName : bName;
+                const chatId = getPrivateChatId(state.username, otherUser);
+                const isChatActive = chatId === activeChatId ? 'background:rgba(255,255,255,0.1);' : '';
+                
+                return `
+                    <div style="padding: 0.8rem 1rem; border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer; display: flex; align-items: center; gap: 12px; ${isChatActive} border-radius: 8px; transition: all 0.15s;" class="friend-list-row" onclick="startPrivateChatFromSocial('${otherUser.replace(/'/g, "\\'")}')">
+                        ${getPlayerAvatarAndFrameHTML(otherUser, '32px')}
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="font-weight:bold; color: white; font-size: 0.9rem; font-family: var(--font);">${otherUser}</div>
+                            <div style="font-size: 0.72rem; color: var(--text-muted); font-family: var(--font);">Click para chatear</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        list.innerHTML = `
+            <div onclick="openAddFriendPanel()" style="padding: 12px; margin-bottom: 12px; border-radius: 10px; background: linear-gradient(135deg, rgba(168, 85, 247, 0.2) 0%, rgba(168, 85, 247, 0.05) 100%); border: 1.5px solid rgba(168, 85, 247, 0.35); text-align: center; color: white; font-weight: bold; cursor: pointer; font-size: 0.82rem; font-family: var(--font); transition: all 0.2s;" class="add-friend-trigger-btn">
+                <i class="fa-solid fa-user-plus" style="color: #c084fc; margin-right: 4px;"></i> BUSCAR / AGREGAR AMIGOS
+            </div>
+            
+            <div style="font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); font-weight: 800; letter-spacing: 0.05em; padding-left: 4px; margin-bottom: 8px; font-family: var(--font);">Mis Amigos (${friends.length})</div>
+            
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+                ${friendsListHtml}
+            </div>
+        `;
+        return;
+    }
     
     const chats = state.conversations.filter(c => {
+        if (c.listingId === 'friendship') return false; // Exclude friendships from trade chat lists
         const buyerName = parsePublisher(c.buyer).username.toLowerCase();
         const sellerName = parsePublisher(c.seller).username.toLowerCase();
         const userClean = state.username.toLowerCase();
@@ -2604,7 +2689,7 @@ function renderInboxList() {
         const lastMsg = c.messages[c.messages.length - 1];
         const isActive = c.id === activeChatId ? 'background:rgba(255,255,255,0.1);' : '';
         const item = state.marketplaceListings.find(l => l.id === c.listingId);
-        const itemTitle = item ? item.title : 'Publicación eliminada';
+        const itemTitle = c.listingId === 'direct_message' ? 'Chat Directo' : (item ? item.title : 'Publicación eliminada');
 
         let lastText = '';
         if (lastMsg) {
@@ -3056,6 +3141,676 @@ syncUser = function() {
     updateInboxBadge();
 }
 setTimeout(() => updateInboxBadge(), 1000);
+
+// ─── FRIENDSHIP & SOCIAL SYSTEM (DISCORD STYLE) ─────────────────
+function getPrivateChatId(u1, u2) {
+    const sorted = [u1.toLowerCase(), u2.toLowerCase()].sort();
+    return `p2p_${sorted[0]}_${sorted[1]}`;
+}
+
+function canChatWithUser(targetUsername) {
+    if (!state.username) return false;
+    const u1 = state.username.toLowerCase();
+    const u2 = targetUsername.toLowerCase();
+    
+    if (u1 === u2) return true;
+    
+    // 1. Check if they are in the same clan
+    const myFaction = getUserFaction();
+    if (myFaction) {
+        const factionId = myFaction.faction.id;
+        const leaderInfo = parsePublisher(myFaction.faction.publisher);
+        const isLeader = leaderInfo.username.toLowerCase() === u2;
+        
+        const isMember = state.conversations.some(c => 
+            c.listingId === factionId && 
+            c.status === 'accepted' && 
+            c.buyer.toLowerCase() === u2
+        );
+        
+        if (isLeader || isMember) {
+            return true; // Comparten el mismo clan!
+        }
+    }
+    
+    // 2. Check if they are friends (accepted friendship status)
+    const sorted = [u1, u2].sort();
+    const friendId = `friend_${sorted[0]}_${sorted[1]}`;
+    const friendship = state.conversations.find(c => c.id === friendId);
+    if (friendship && friendship.status === 'accepted') {
+        return true; // Amigos aceptados!
+    }
+    
+    return false;
+}
+
+async function startDirectChat(targetUsername) {
+    if (!state.username) return;
+    if (targetUsername.toLowerCase() === state.username.toLowerCase()) {
+        showToast('⚠️ No puedes chatear contigo mismo.');
+        return;
+    }
+    
+    const u1 = state.username;
+    const u2 = targetUsername;
+    const chatId = getPrivateChatId(u1, u2);
+    
+    let chatRoom = state.conversations.find(c => c.id === chatId);
+    
+    if (!chatRoom) {
+        if (supabaseClient) {
+            try {
+                const { data, error } = await supabaseClient
+                    .from('conversations')
+                    .select('*')
+                    .eq('id', chatId)
+                    .maybeSingle();
+                if (data) {
+                    chatRoom = {
+                        id: data.id,
+                        listingId: data.listing_id,
+                        buyer: data.buyer,
+                        seller: data.seller,
+                        status: data.status,
+                        messages: data.messages
+                    };
+                    state.conversations.push(chatRoom);
+                    localStorage.setItem('obs_conversations', JSON.stringify(state.conversations));
+                }
+            } catch(e) {
+                console.error("Error fetching direct chat:", e);
+            }
+        }
+    }
+    
+    if (!chatRoom) {
+        chatRoom = {
+            id: chatId,
+            listingId: 'direct_message',
+            buyer: u1,
+            seller: u2,
+            status: 'active',
+            messages: []
+        };
+        
+        state.conversations.push(chatRoom);
+        localStorage.setItem('obs_conversations', JSON.stringify(state.conversations));
+        
+        if (supabaseClient) {
+            try {
+                await supabaseClient
+                    .from('conversations')
+                    .insert([{
+                        id: chatRoom.id,
+                        listing_id: chatRoom.listingId,
+                        buyer: chatRoom.buyer,
+                        seller: chatRoom.seller,
+                        status: chatRoom.status,
+                        messages: chatRoom.messages
+                    }]);
+            } catch(e) {
+                console.error("Error inserting direct chat:", e);
+            }
+        }
+    }
+    
+    setInboxTab('active');
+    activeChatId = chatRoom.id;
+    renderInboxList();
+    renderChatMessages();
+}
+
+function startPrivateChatFromSocial(otherUser) {
+    startDirectChat(otherUser);
+}
+
+function startPrivateChatWithMember(targetUsername) {
+    closeModal('modal-clan-chat');
+    openInboxModal();
+    startDirectChat(targetUsername);
+}
+
+// Friendship requests actions
+async function sendFriendRequest(targetUsername) {
+    if (!state.username) return;
+    const u1 = state.username;
+    const u2 = targetUsername;
+    
+    if (u1.toLowerCase() === u2.toLowerCase()) {
+        showToast('⚠️ No puedes enviarte una solicitud a ti mismo.');
+        return;
+    }
+    
+    const sorted = [u1.toLowerCase(), u2.toLowerCase()].sort();
+    const friendId = `friend_${sorted[0]}_${sorted[1]}`;
+    
+    // Check if friendship status already exists
+    const existing = state.conversations.find(c => c.id === friendId);
+    if (existing) {
+        if (existing.status === 'accepted') {
+            showToast('👥 Ya eres amigo de este jugador.');
+        } else {
+            showToast('⏳ Ya hay una solicitud pendiente con este jugador.');
+        }
+        return;
+    }
+    
+    const newFriendship = {
+        id: friendId,
+        listingId: 'friendship',
+        buyer: u1,
+        seller: u2,
+        status: 'pending',
+        messages: [`request_sent_by:${u1}`]
+    };
+    
+    state.conversations.push(newFriendship);
+    localStorage.setItem('obs_conversations', JSON.stringify(state.conversations));
+    
+    if (supabaseClient) {
+        try {
+            const { error } = await supabaseClient
+                .from('conversations')
+                .insert([{
+                    id: newFriendship.id,
+                    listing_id: newFriendship.listingId,
+                    buyer: newFriendship.buyer,
+                    seller: newFriendship.seller,
+                    status: newFriendship.status,
+                    messages: newFriendship.messages
+                }]);
+            if (error) throw error;
+            showToast('✉️ Solicitud de amistad enviada.');
+        } catch(e) {
+            console.error("Error sending friend request:", e);
+        }
+    }
+    
+    renderOtherUserProfile(targetUsername);
+    if (currentInboxTab === 'social') {
+        renderSocialPanel();
+    }
+}
+
+async function acceptFriendRequest(requestId) {
+    const friendship = state.conversations.find(c => c.id === requestId);
+    if (!friendship) return;
+    
+    friendship.status = 'accepted';
+    friendship.messages.push(`accepted_at:${Date.now()}`);
+    localStorage.setItem('obs_conversations', JSON.stringify(state.conversations));
+    
+    if (supabaseClient) {
+        try {
+            const { error } = await supabaseClient
+                .from('conversations')
+                .update({ 
+                    status: 'accepted',
+                    messages: friendship.messages,
+                    updated_at: new Date()
+                })
+                .eq('id', requestId);
+            if (error) throw error;
+            showToast('✅ Solicitud de amistad aceptada.');
+        } catch(e) {
+            console.error("Error accepting friend request:", e);
+        }
+    }
+    
+    if (currentInboxTab === 'social') {
+        renderSocialPanel();
+    }
+}
+
+async function declineFriendRequest(requestId) {
+    const idx = state.conversations.findIndex(c => c.id === requestId);
+    if (idx !== -1) {
+        state.conversations.splice(idx, 1);
+        localStorage.setItem('obs_conversations', JSON.stringify(state.conversations));
+    }
+    
+    if (supabaseClient) {
+        try {
+            const { error } = await supabaseClient
+                .from('conversations')
+                .delete()
+                .eq('id', requestId);
+            if (error) throw error;
+            showToast('🗑️ Solicitud de amistad rechazada/cancelada.');
+        } catch(e) {
+            console.error("Error declining friend request:", e);
+        }
+    }
+    
+    if (currentInboxTab === 'social') {
+        renderSocialPanel();
+    }
+}
+
+function renderOtherUserProfile(targetUsername) {
+    const viewPanel = document.getElementById('prf-view-panel');
+    if (!viewPanel) return;
+    
+    const u1 = state.username.toLowerCase();
+    const u2 = targetUsername.toLowerCase();
+    
+    const sorted = [u1, u2].sort();
+    const friendId = `friend_${sorted[0]}_${sorted[1]}`;
+    const friendship = state.conversations.find(c => c.id === friendId);
+    
+    let friendStatusHtml = '';
+    let actionBtnHtml = '';
+    
+    if (friendship) {
+        if (friendship.status === 'accepted') {
+            friendStatusHtml = `
+                <div style="background: rgba(74, 222, 128, 0.1); border: 1.5px solid rgba(74, 222, 128, 0.3); border-radius: 8px; padding: 10px 14px; display: flex; align-items: center; justify-content: center; gap: 8px; color: #4ade80; font-weight: bold; font-size: 0.85rem; font-family: var(--font);">
+                    <i class="fa-solid fa-user-check"></i> Son Amigos
+                </div>
+            `;
+            actionBtnHtml = `
+                <button onclick="closeModal('modal-user-profile'); openModal('modal-inbox'); startDirectChat('${targetUsername.replace(/'/g, "\\'")}')" class="btn-mc btn-purple-mc width-100" style="margin-top: 10px; padding: 10px; border-radius: 8px; font-family: var(--font);">
+                    <i class="fa-solid fa-envelope"></i> Enviar Mensaje Privado
+                </button>
+            `;
+        } else if (friendship.status === 'pending') {
+            const isSender = friendship.buyer.toLowerCase() === u1;
+            if (isSender) {
+                friendStatusHtml = `
+                    <div style="background: rgba(251, 191, 36, 0.1); border: 1.5px solid rgba(251, 191, 36, 0.3); border-radius: 8px; padding: 10px 14px; display: flex; align-items: center; justify-content: center; gap: 8px; color: #fbbf24; font-weight: bold; font-size: 0.85rem; font-family: var(--font);">
+                        <i class="fa-solid fa-clock"></i> Solicitud Enviada (Pendiente)
+                    </div>
+                `;
+            } else {
+                friendStatusHtml = `
+                    <div style="background: rgba(168, 85, 247, 0.1); border: 1.5px solid rgba(168, 85, 247, 0.3); border-radius: 8px; padding: 10px 14px; display: flex; align-items: center; justify-content: center; gap: 8px; color: #c084fc; font-weight: bold; font-size: 0.85rem; font-family: var(--font);">
+                        <i class="fa-solid fa-user-plus"></i> Te ha enviado una solicitud
+                    </div>
+                `;
+                actionBtnHtml = `
+                    <button onclick="acceptFriendRequest('${friendship.id}'); renderOtherUserProfile('${targetUsername.replace(/'/g, "\\'")}')" class="btn-mc btn-green-mc width-100" style="margin-top: 10px; padding: 10px; border-radius: 8px; font-family: var(--font);">
+                        <i class="fa-solid fa-check"></i> Aceptar Solicitud
+                    </button>
+                    <button onclick="declineFriendRequest('${friendship.id}'); renderOtherUserProfile('${targetUsername.replace(/'/g, "\\'")}')" class="btn-mc btn-dark-mc width-100" style="margin-top: 6px; padding: 10px; border-radius: 8px; border-color: #f87171; color: #f87171; font-family: var(--font);">
+                        <i class="fa-solid fa-xmark"></i> Rechazar Solicitud
+                    </button>
+                `;
+            }
+        }
+    } else {
+        actionBtnHtml = `
+            <button onclick="sendFriendRequest('${targetUsername.replace(/'/g, "\\'")}')" class="btn-mc btn-purple-mc width-100" style="margin-top: 10px; padding: 10px; border-radius: 8px; font-family: var(--font);">
+                <i class="fa-solid fa-user-plus"></i> Enviar Solicitud de Amistad
+            </button>
+        `;
+    }
+    
+    const areInSameClan = canChatWithUser(targetUsername) && (!friendship || friendship.status !== 'accepted');
+    if (areInSameClan) {
+        actionBtnHtml += `
+            <div style="font-size: 0.72rem; color: #4ade80; font-family: var(--font); text-align: center; margin: 10px 0 5px 0; font-weight: bold;">
+                <i class="fa-solid fa-shield-halved"></i> Comparten el mismo Clan
+            </div>
+            <button onclick="closeModal('modal-user-profile'); openModal('modal-inbox'); startDirectChat('${targetUsername.replace(/'/g, "\\'")}')" class="btn-mc btn-purple-mc width-100" style="margin-top: 2px; padding: 10px; border-radius: 8px; font-family: var(--font);">
+                <i class="fa-solid fa-envelope"></i> Enviar Mensaje Privado
+            </button>
+        `;
+    }
+    
+    viewPanel.innerHTML = `
+        <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 1.2rem; display: flex; flex-direction: column; gap: 12px; font-family: var(--font);">
+            <div style="text-align: center; font-size: 1.15rem; font-weight: bold; color: #fff; margin-bottom: 4px;">
+                Perfil de ${targetUsername}
+            </div>
+            
+            ${friendStatusHtml}
+            ${actionBtnHtml}
+        </div>
+    `;
+}
+
+// Social Panel View & Search
+let socialPanelMode = 'add';
+function openAddFriendPanel() {
+    socialPanelMode = 'add';
+    renderSocialPanel();
+}
+
+function renderSocialPanel() {
+    const panel = document.getElementById('social-panel');
+    if (!panel) return;
+    
+    if (socialPanelMode === 'add') {
+        const incoming = state.conversations.filter(c => 
+            c.listingId === 'friendship' && 
+            c.status === 'pending' && 
+            c.seller.toLowerCase() === state.username.toLowerCase()
+        );
+        const outgoing = state.conversations.filter(c => 
+            c.listingId === 'friendship' && 
+            c.status === 'pending' && 
+            c.buyer.toLowerCase() === state.username.toLowerCase()
+        );
+        
+        let requestsHtml = '';
+        if (incoming.length === 0 && outgoing.length === 0) {
+            requestsHtml = `<div style="padding: 1.2rem; text-align: center; color: var(--text-muted); font-size: 0.85rem; background: rgba(0,0,0,0.15); border-radius: 12px; border: 1px dashed rgba(255,255,255,0.06); font-family: var(--font);">No tienes solicitudes de amistad pendientes.</div>`;
+        } else {
+            const incomingHtml = incoming.map(r => `
+                <div style="background: rgba(168, 85, 247, 0.05); border: 1.5px solid rgba(168, 85, 247, 0.15); border-radius: 12px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                    <div style="display: flex; align-items: center; gap: 10px; cursor: pointer;" onclick="openUserProfileModal('${r.buyer.replace(/'/g, "\\'")}')">
+                        ${getPlayerAvatarAndFrameHTML(r.buyer, '30px')}
+                        <div>
+                            <strong style="color: #fff; font-size: 0.88rem; font-family: var(--font);">${r.buyer}</strong>
+                            <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 1px;">Solicitud recibida</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button onclick="acceptFriendRequest('${r.id}')" class="btn-mc btn-green-mc" style="margin: 0; padding: 6px 12px; font-size: 0.72rem; border-radius: 8px;"><i class="fa-solid fa-check"></i> Aceptar</button>
+                        <button onclick="declineFriendRequest('${r.id}')" class="btn-mc btn-dark-mc" style="margin: 0; padding: 6px 12px; font-size: 0.72rem; border-radius: 8px; border-color:#f87171; color:#f87171;"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                </div>
+            `).join('');
+            
+            const outgoingHtml = outgoing.map(r => `
+                <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                    <div style="display: flex; align-items: center; gap: 10px; cursor: pointer;" onclick="openUserProfileModal('${r.seller.replace(/'/g, "\\'")}')">
+                        ${getPlayerAvatarAndFrameHTML(r.seller, '30px')}
+                        <div>
+                            <strong style="color: #fff; font-size: 0.88rem; font-family: var(--font);">${r.seller}</strong>
+                            <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 1px;">Solicitud enviada</div>
+                        </div>
+                    </div>
+                    <button onclick="declineFriendRequest('${r.id}')" class="btn-mc btn-dark-mc" style="margin: 0; padding: 6px 12px; font-size: 0.72rem; border-radius: 8px; border-color:#f87171; color:#f87171;"><i class="fa-solid fa-trash"></i> Cancelar</button>
+                </div>
+            `).join('');
+            
+            requestsHtml = `
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                    ${incomingHtml}
+                    ${outgoingHtml}
+                </div>
+            `;
+        }
+        
+        panel.innerHTML = `
+            <div style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1.5rem; height: 100%; overflow-y: auto; font-family: var(--font);">
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <div style="font-size: 1.05rem; font-weight: bold; color: white; display: flex; align-items: center; gap: 8px;">
+                        <i class="fa-solid fa-magnifying-glass" style="color: var(--primary);"></i> Buscar y Agregar Amigos
+                    </div>
+                    <p style="font-size: 0.82rem; color: var(--text-muted); margin: 0;">
+                        Escribe el nombre de usuario de Minecraft de un jugador para buscar su perfil o enviarle una solicitud de amistad directa.
+                    </p>
+                    <div style="display: flex; gap: 10px; margin-top: 4px;">
+                        <input type="text" id="social-search-input" placeholder="Nombre de usuario de Minecraft..." style="flex: 1; padding: 0.8rem 1.2rem; background: rgba(0,0,0,0.3); border: 1.5px solid rgba(168,85,247,0.2); color: white; border-radius: 10px; outline: none; font-size: 0.88rem;">
+                        <button onclick="searchSocialPlayer()" class="btn-mc btn-purple-mc" style="margin: 0; border-radius: 10px; padding: 0 1.2rem; display: flex; align-items: center; gap: 4px;">
+                            <i class="fa-solid fa-search"></i> Buscar
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="social-search-results" style="display: none; background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 1.2rem; flex-direction: column; gap: 10px;">
+                    <!-- Result goes here -->
+                </div>
+                
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <div style="font-size: 0.95rem; font-weight: bold; color: white; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 6px; display: flex; align-items: center; gap: 8px;">
+                        <i class="fa-solid fa-hourglass-half" style="color: #fbbf24;"></i> Solicitudes Pendientes
+                    </div>
+                    <div style="margin-top: 6px;">
+                        ${requestsHtml}
+                    </div>
+                </div>
+                
+                <div style="background: linear-gradient(135deg, rgba(16, 12, 28, 0.5) 0%, rgba(20, 17, 34, 0.3) 100%); border: 1px solid rgba(168, 85, 247, 0.1); border-radius: 12px; padding: 1.2rem; display: flex; align-items: center; gap: 15px; margin-top: auto;">
+                    <i class="fa-solid fa-user-astronaut fa-3x" style="color: rgba(168, 85, 247, 0.4); text-shadow: 0 0 15px rgba(168, 85, 247, 0.25);"></i>
+                    <div>
+                        <strong style="color: white; font-size: 0.9rem; display: block; margin-bottom: 2px;">Sistema Social Avanzado</strong>
+                        <span style="font-size: 0.78rem; color: var(--text-muted); line-height: 1.4; display: block;">
+                            Agrega amigos para chatear con ellos directamente. Si estás en el mismo clan, la mensajería privada estará desbloqueada sin necesidad de agregarse.
+                        </span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+}
+
+async function searchSocialPlayer() {
+    const input = document.getElementById('social-search-input');
+    const resultsContainer = document.getElementById('social-search-results');
+    if (!input || !resultsContainer) return;
+    
+    const searchVal = input.value.trim();
+    if (!searchVal) {
+        showToast('⚠️ Introduce un nombre de usuario para buscar.');
+        return;
+    }
+    
+    resultsContainer.style.display = 'flex';
+    resultsContainer.innerHTML = `<div style="text-align:center;color:var(--text-muted);font-size:0.85rem;padding:0.5rem;"><i class="fa-solid fa-spinner fa-spin"></i> Buscando jugador...</div>`;
+    
+    if (!supabaseClient) {
+        resultsContainer.innerHTML = `<div style="color:#f87171;text-align:center;font-size:0.85rem;">Base de datos no disponible.</div>`;
+        return;
+    }
+    
+    try {
+        const { data, error } = await supabaseClient
+            .from('conversations')
+            .select('*')
+            .eq('listing_id', 'registration')
+            .ilike('buyer', searchVal)
+            .maybeSingle();
+            
+        if (error) throw error;
+        
+        if (!data) {
+            resultsContainer.innerHTML = `
+                <div style="color:var(--text-muted);text-align:center;font-size:0.85rem;padding:0.5rem;">
+                    No se encontró ningún jugador registrado con el nombre <b>"${searchVal}"</b>.
+                </div>
+            `;
+            return;
+        }
+        
+        const foundUser = data.buyer;
+        const u1 = state.username.toLowerCase();
+        const u2 = foundUser.toLowerCase();
+        
+        let actionBtnHtml = '';
+        if (u1 === u2) {
+            actionBtnHtml = `<span style="font-size: 0.8rem; color: var(--text-muted); font-weight: bold;">Tú</span>`;
+        } else {
+            const sorted = [u1, u2].sort();
+            const friendId = `friend_${sorted[0]}_${sorted[1]}`;
+            const friendship = state.conversations.find(c => c.id === friendId);
+            
+            if (friendship) {
+                if (friendship.status === 'accepted') {
+                    actionBtnHtml = `
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span style="font-size: 0.8rem; color: #4ade80; font-weight: bold;"><i class="fa-solid fa-check"></i> Ya son amigos</span>
+                            <button onclick="startPrivateChatFromSocial('${foundUser.replace(/'/g, "\\'")}')" class="btn-mc btn-purple-mc" style="margin: 0; padding: 6px 12px; font-size: 0.72rem; border-radius: 8px;"><i class="fa-solid fa-envelope"></i> Mensaje</button>
+                        </div>
+                    `;
+                } else {
+                    const isSender = friendship.buyer.toLowerCase() === u1;
+                    if (isSender) {
+                        actionBtnHtml = `<span style="font-size: 0.8rem; color: #fbbf24; font-weight: bold;"><i class="fa-solid fa-clock"></i> Solicitud Pendiente</span>`;
+                    } else {
+                        actionBtnHtml = `
+                            <div style="display: flex; gap: 6px; align-items:center;">
+                                <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: bold;">Te envió solicitud:</span>
+                                <button onclick="acceptFriendRequest('${friendship.id}'); searchSocialPlayer()" class="btn-mc btn-green-mc" style="margin: 0; padding: 4px 10px; font-size: 0.7rem; border-radius: 6px;">Aceptar</button>
+                            </div>
+                        `;
+                    }
+                }
+            } else {
+                actionBtnHtml = `
+                    <button onclick="sendFriendRequest('${foundUser.replace(/'/g, "\\'")}')" class="btn-mc btn-purple-mc" style="margin: 0; padding: 6px 12px; font-size: 0.75rem; border-radius: 8px;">
+                        <i class="fa-solid fa-user-plus"></i> Enviar Solicitud
+                    </button>
+                `;
+            }
+        }
+        
+        resultsContainer.innerHTML = `
+            <div style="font-size: 0.78rem; text-transform: uppercase; color: var(--text-muted); font-weight: 800; letter-spacing: 0.05em; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 4px; margin-bottom: 4px;">Resultado de Búsqueda</div>
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0;">
+                <div style="display: flex; align-items: center; gap: 10px; cursor: pointer;" onclick="openUserProfileModal('${foundUser.replace(/'/g, "\\'")}')">
+                    ${getPlayerAvatarAndFrameHTML(foundUser, '34px')}
+                    <div>
+                        <strong style="color: #fff; font-size: 0.92rem;">${foundUser}</strong>
+                        <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 1px;">Click para ver perfil completo</div>
+                    </div>
+                </div>
+                <div>
+                    ${actionBtnHtml}
+                </div>
+            </div>
+        `;
+        
+    } catch(err) {
+        console.error("Error searching social user:", err);
+        resultsContainer.innerHTML = `<div style="color:#f87171;text-align:center;font-size:0.85rem;">Error al realizar la búsqueda.</div>`;
+    }
+}
+
+// ─── CLAN DETAILS VIEW OVERLAY (MANIFESTO & MEMBERS) ────────────
+let clanDetailsViewActive = false;
+
+function toggleClanDetailsView() {
+    const detailsContainer = document.getElementById('clan-chat-details-container');
+    const msgContainer = document.getElementById('clan-chat-messages-container');
+    const inputBox = document.getElementById('clan-chat-input-box');
+    const adminContainer = document.getElementById('clan-chat-admin-container');
+    const banner = document.getElementById('clan-chat-edit-banner');
+    
+    if (!detailsContainer || !msgContainer || !inputBox) return;
+    
+    clanDetailsViewActive = !clanDetailsViewActive;
+    
+    if (clanDetailsViewActive) {
+        msgContainer.style.display = 'none';
+        inputBox.style.display = 'none';
+        if (banner) banner.style.display = 'none';
+        if (adminContainer) adminContainer.style.display = 'none';
+        
+        detailsContainer.style.display = 'flex';
+        renderClanDetailsPanel();
+    } else {
+        detailsContainer.style.display = 'none';
+        msgContainer.style.display = 'flex';
+        inputBox.style.display = 'flex';
+        if (editingClanMessageIdx !== null && banner) {
+            banner.style.display = 'flex';
+        }
+        
+        clanChatAdminViewActive = false;
+        const toggleBtn = document.getElementById('clan-chat-admin-toggle-btn');
+        if (toggleBtn) toggleBtn.textContent = 'ADMIN';
+    }
+}
+
+function renderClanDetailsPanel() {
+    const userFaction = getUserFaction();
+    if (!userFaction) return;
+    
+    const faction = userFaction.faction;
+    let factionData = {};
+    try {
+        if (faction.desc && faction.desc.startsWith('FACDATA:')) {
+            factionData = JSON.parse(faction.desc.substring(8));
+        }
+    } catch(e) {}
+    
+    const detailsContainer = document.getElementById('clan-chat-details-container');
+    if (!detailsContainer) return;
+    
+    const members = [];
+    const pubInfo = parsePublisher(faction.publisher);
+    members.push({
+        username: pubInfo.username,
+        role: 'leader'
+    });
+    
+    (state.conversations || []).forEach(c => {
+        if (c.listingId === faction.id && c.status === 'accepted' && c.buyer !== 'clan_system') {
+            const memberName = c.buyer;
+            const isMemberAdmin = (factionData.admins || []).map(a => a.toLowerCase()).includes(memberName.toLowerCase());
+            
+            if (!members.find(m => m.username.toLowerCase() === memberName.toLowerCase())) {
+                members.push({
+                    username: memberName,
+                    role: isMemberAdmin ? 'admin' : 'member',
+                    conversationId: c.id
+                });
+            }
+        }
+    });
+    
+    let membersHtml = members.map(m => {
+        const isLeader = m.role === 'leader';
+        const isAdmin = m.role === 'admin';
+        
+        let roleBadge = `<span style="font-size: 0.65rem; padding: 3px 8px; border-radius: 4px; background: #fbbf24; color: #111; font-weight: 800; font-family: var(--font);">LÍDER</span>`;
+        if (isAdmin) {
+            roleBadge = `<span style="font-size: 0.65rem; padding: 3px 8px; border-radius: 4px; background: #a855f7; color: #fff; font-weight: 800; font-family: var(--font);">ADMIN</span>`;
+        } else if (m.role === 'member') {
+            roleBadge = `<span style="font-size: 0.65rem; padding: 3px 8px; border-radius: 4px; background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.7); font-weight: 800; font-family: var(--font);">MIEMBRO</span>`;
+        }
+        
+        const avatarFrameMarkup = getPlayerAvatarAndFrameHTML(m.username, '34px');
+        
+        return `
+            <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; transition: all 0.2s;" class="member-detail-row">
+                <div style="display: flex; align-items: center; gap: 12px; cursor: pointer;" onclick="openUserProfileModal('${m.username.replace(/'/g, "\\'")}')">
+                    ${avatarFrameMarkup}
+                    <div>
+                        <strong style="color: #fff; font-size: 0.92rem; font-family: var(--font); transition: color 0.15s;" class="member-name-hover">${m.username}</strong>
+                        <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 1px;">Click para ver perfil</div>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    ${roleBadge}
+                    ${m.username.toLowerCase() !== state.username.toLowerCase() ? `
+                        <button onclick="startPrivateChatWithMember('${m.username.replace(/'/g, "\\'")}')" class="btn-mc btn-purple-mc" style="margin: 0; padding: 6px 12px; font-size: 0.75rem; border-radius: 8px; display: flex; align-items: center; gap: 4px; font-family: var(--font);">
+                            <i class="fa-solid fa-paper-plane"></i> Mensaje
+                        </button>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    detailsContainer.innerHTML = `
+        <div style="background: rgba(168, 85, 247, 0.05); border: 1px solid rgba(168, 85, 247, 0.15); border-radius: 12px; padding: 1.2rem;">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px; color: #a855f7; font-weight: bold; font-size: 0.95rem;">
+                <i class="fa-solid fa-scroll"></i> Manifiesto & Objetivos del Clan
+            </div>
+            <p style="color: #cfc2d6; font-size: 0.88rem; line-height: 1.5; margin: 0;">
+                ${factionData.description || 'El líder del clan no ha configurado una descripción en el manifiesto.'}
+            </p>
+        </div>
+        
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div style="color: #fff; font-weight: bold; font-size: 0.95rem; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
+                <span><i class="fa-solid fa-users"></i> Miembros Unidos</span>
+                <span style="font-size: 0.78rem; color: var(--text-muted); font-weight: 500;">${members.length} conectados</span>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 6px;">
+                ${membersHtml}
+            </div>
+        </div>
+        
+        <button onclick="toggleClanDetailsView()" class="btn-mc btn-dark-mc" style="margin-top: 1rem; width: 100%; border-radius: 10px; padding: 0.8rem; font-family: var(--font);">
+            <i class="fa-solid fa-arrow-left"></i> Volver al Chat
+        </button>
+    `;
+}
 
 // ─── DELETE LISTING ───────────────────────────────────────────
 function deleteListing(id) {
@@ -4306,6 +5061,9 @@ function openUserProfileModal(targetUsername) {
         const viewMsg = document.getElementById('prf-view-msg');
         if (viewMsg) viewMsg.textContent = `Perfil de ${targetUsername}`;
         if (tagEl) tagEl.textContent = '';
+        
+        // Render target user details (friends actions, DM link, etc.)
+        renderOtherUserProfile(targetUsername);
     }
 
     // Render avatar preview in header
@@ -4751,12 +5509,15 @@ async function openClanChatModal() {
     }
     
     clanChatAdminViewActive = false;
+    clanDetailsViewActive = false;
     const adminContainer = document.getElementById('clan-chat-admin-container');
     const msgContainer = document.getElementById('clan-chat-messages-container');
     const inputBox = document.getElementById('clan-chat-input-box');
     const toggleBtn = document.getElementById('clan-chat-admin-toggle-btn');
+    const detailsContainer = document.getElementById('clan-chat-details-container');
     
     if (adminContainer) adminContainer.style.display = 'none';
+    if (detailsContainer) detailsContainer.style.display = 'none';
     if (msgContainer) msgContainer.style.display = 'flex';
     if (inputBox) inputBox.style.display = 'flex';
     if (toggleBtn) {
@@ -5177,12 +5938,16 @@ function toggleClanChatAdminView() {
     const msgContainer = document.getElementById('clan-chat-messages-container');
     const inputBox = document.getElementById('clan-chat-input-box');
     const toggleBtn = document.getElementById('clan-chat-admin-toggle-btn');
+    const detailsContainer = document.getElementById('clan-chat-details-container');
     
     if (!adminContainer || !msgContainer || !inputBox || !toggleBtn) return;
     
     clanChatAdminViewActive = !clanChatAdminViewActive;
     
     if (clanChatAdminViewActive) {
+        clanDetailsViewActive = false;
+        if (detailsContainer) detailsContainer.style.display = 'none';
+        
         adminContainer.style.display = 'flex';
         msgContainer.style.display = 'none';
         inputBox.style.display = 'none';
