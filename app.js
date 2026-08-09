@@ -1979,7 +1979,7 @@ async function redeemPromoCode() {
 
 // ─── IP COPY ──────────────────────────────────────────────────
 function copyIP() {
-    const ip = 'PICOLANDNEWWORLD.aternos.me:51309';
+    const ip = '54.39.73.78:25583';
     navigator.clipboard.writeText(ip).then(() => {
         showToast('📋 IP copiada: ' + ip);
     }).catch(() => {
@@ -1994,7 +1994,7 @@ async function updateServerStatus() {
     if (!statusTextEl || !liveDotEl) return;
     
     try {
-        const res = await fetch('https://api.mcstatus.io/v2/status/java/PICOLANDNEWWORLD.aternos.me');
+        const res = await fetch('https://api.mcstatus.io/v2/status/java/54.39.73.78:25583');
         if (!res.ok) throw new Error('API error');
         const data = await res.json();
         
@@ -3787,13 +3787,20 @@ function renderClanDetailsPanel() {
     }).join('');
     
     detailsContainer.innerHTML = `
-        <div style="background: rgba(168, 85, 247, 0.05); border: 1px solid rgba(168, 85, 247, 0.15); border-radius: 12px; padding: 1.2rem;">
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px; color: #a855f7; font-weight: bold; font-size: 0.95rem;">
-                <i class="fa-solid fa-scroll"></i> Manifiesto & Objetivos del Clan
+        <div style="background: rgba(168, 85, 247, 0.05); border: 1px solid rgba(168, 85, 247, 0.15); border-radius: 12px; padding: 1.2rem; display: flex; flex-direction: column; gap: 12px;">
+            <div>
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px; color: #a855f7; font-weight: bold; font-size: 0.95rem;">
+                    <i class="fa-solid fa-scroll"></i> Manifiesto & Objetivos del Clan
+                </div>
+                <p style="color: #cfc2d6; font-size: 0.88rem; line-height: 1.5; margin: 0;">
+                    ${factionData.description || 'El líder del clan no ha configurado una descripción en el manifiesto.'}
+                </p>
             </div>
-            <p style="color: #cfc2d6; font-size: 0.88rem; line-height: 1.5; margin: 0;">
-                ${factionData.description || 'El líder del clan no ha configurado una descripción en el manifiesto.'}
-            </p>
+            <div style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 10px; display: flex; justify-content: flex-end;">
+                <button onclick="confirmLeaveClan()" class="btn-mc btn-dark-mc" style="margin: 0; padding: 6px 14px; font-size: 0.78rem; border-color: #f87171; color: #f87171; border-radius: 8px; display: flex; align-items: center; gap: 6px;">
+                    <i class="fa-solid fa-door-open"></i> Abandonar Clan
+                </button>
+            </div>
         </div>
         
         <div style="display: flex; flex-direction: column; gap: 10px;">
@@ -3810,6 +3817,90 @@ function renderClanDetailsPanel() {
             <i class="fa-solid fa-arrow-left"></i> Volver al Chat
         </button>
     `;
+}
+
+function confirmLeaveClan() {
+    const userFaction = getUserFaction();
+    if (!userFaction) {
+        showToast('⚠️ No perteneces a ningún clan.');
+        return;
+    }
+    
+    if (userFaction.role === 'leader') {
+        showToast('⚠️ Como líder no puedes abandonar el clan directamente. Debes disolverlo o transferir el liderazgo desde el menú de administración del clan.');
+        return;
+    }
+    
+    const faction = userFaction.faction;
+    
+    const membership = state.conversations.find(c => 
+        c.listingId === faction.id && 
+        c.status === 'accepted' && 
+        c.buyer.toLowerCase() === state.username.toLowerCase()
+    );
+    
+    if (!membership) {
+        showToast('⚠️ No se encontró tu registro de miembro en este clan.');
+        return;
+    }
+    
+    customConfirm(
+        '¿Abandonar Clan?',
+        `¿Estás seguro de que quieres salir de <b>${faction.title}</b>? Perderás acceso al chat de clan y beneficios.`,
+        async () => {
+            showToast('⏳ Abandonando clan...');
+            
+            let factionData = {};
+            try {
+                if (faction.desc && faction.desc.startsWith('FACDATA:')) {
+                    factionData = JSON.parse(faction.desc.substring(8));
+                }
+            } catch(e) {}
+            
+            const currentCount = parseInt(factionData.memberCount || 1);
+            factionData.memberCount = Math.max(1, currentCount - 1);
+            
+            if (factionData.admins) {
+                factionData.admins = factionData.admins.filter(a => a.toLowerCase() !== state.username.toLowerCase());
+            }
+            
+            const newDesc = "FACDATA:" + JSON.stringify(factionData);
+            
+            if (supabaseClient) {
+                try {
+                    const { error: listErr } = await supabaseClient
+                        .from('listings')
+                        .update({ desc_text: newDesc })
+                        .eq('id', faction.id);
+                    if (listErr) throw listErr;
+                    
+                    const { error: convErr } = await supabaseClient
+                        .from('conversations')
+                        .update({ status: 'kicked', updated_at: new Date() })
+                        .eq('id', membership.id);
+                    if (convErr) throw convErr;
+                    
+                    showToast(`🚪 Has abandonado el clan ${faction.title}.`);
+                } catch(e) {
+                    console.error("Error leaving clan:", e);
+                    showToast('❌ Error de conexión al abandonar clan.');
+                    return;
+                }
+            } else {
+                showToast(`🚪 Has abandonado el clan ${faction.title}.`);
+            }
+            
+            faction.desc = newDesc;
+            membership.status = 'kicked';
+            localStorage.setItem('obs_conversations', JSON.stringify(state.conversations));
+            
+            closeModal('modal-clan-chat');
+            
+            dbFetchListings().then(() => {
+                renderFactions();
+            });
+        }
+    );
 }
 
 // ─── DELETE LISTING ───────────────────────────────────────────
