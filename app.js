@@ -82,6 +82,14 @@ async function dbFetchConversations() {
                     if (c.status === 'clan_chat') {
                         return acceptedFactionIds.has(c.listing_id) || ownedFactionIds.has(c.listing_id);
                     }
+                    
+                    // Always include accepted membership records for the factions the user is part of
+                    if (c.status === 'accepted' && c.listing_id && c.listing_id.startsWith('fac_')) {
+                        if (acceptedFactionIds.has(c.listing_id) || ownedFactionIds.has(c.listing_id)) {
+                            return true;
+                        }
+                    }
+
                     const sellerName = c.seller && c.seller.includes('|') ? c.seller.split('|')[0] : (c.seller || '');
                     const buyerName = c.buyer && c.buyer.includes('|') ? c.buyer.split('|')[0] : (c.buyer || '');
                     return sellerName.toLowerCase() === lowerUser || 
@@ -865,6 +873,7 @@ function loadUserDataOnLogin(userId, username) {
                     }
                     saveUserDataToStorage(true); // Solo actualiza localStorage, no escribe en Supabase
                     syncUser();
+                    syncFromConversations(); // Always fetch from registration too for custom avatar/source
                 } else {
                     // Fallback to conversations table if user_profiles is empty
                     syncFromConversations();
@@ -1717,29 +1726,19 @@ function processPayment() {
         
         // 1. Obtener detalles del carrito antes de limpiarlo
         const total = cartTotal();
-        const pointsEarned = Math.floor(total * 100);
         const purchasedItems = state.cart.map(i => `${i.qty}x ${i.name}`).join(', ');
         const txId = 'tbx-' + Math.floor(1000000 + Math.random() * 9000000);
         
-        // 2. Si el usuario está registrado, sumarle y sincronizar sus puntos
-        if (state.username && state.username !== 'Invitado') {
-            saveUserPoints(state.points + pointsEarned);
-        }
-
-        // 3. Rellenar los detalles en el modal de éxito (modal-success)
-        const successPointsAmt = document.getElementById('success-points-amt');
-        const successPointsAmt2 = document.getElementById('success-points-amt2');
+        // 2. Rellenar los detalles en el modal de éxito (modal-success) (No points awarded as per user request)
         const successUser = document.getElementById('success-user');
         const successItem = document.getElementById('success-item');
         const successTx = document.getElementById('success-tx');
 
-        if (successPointsAmt) successPointsAmt.textContent = pointsEarned;
-        if (successPointsAmt2) successPointsAmt2.textContent = `${pointsEarned} Pts`;
         if (successUser) successUser.textContent = state.username || 'Invitado';
         if (successItem) successItem.textContent = purchasedItems || 'Kits de Obsidian SMP';
         if (successTx) successTx.textContent = txId;
 
-        // 4. Limpiar el carrito y cerrar el modal de checkout
+        // 3. Limpiar el carrito y cerrar el modal de checkout
         closeModal('modal-checkout');
         state.cart = [];
         renderCart();
@@ -3465,8 +3464,190 @@ function renderOtherUserProfile(targetUsername) {
             
             ${friendStatusHtml}
             ${actionBtnHtml}
+
+            ${state.username && state.username !== 'Invitado' ? `
+            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; flex-direction: column; gap: 8px;">
+                <div style="font-size: 0.8rem; color: #fbbf24; font-weight: bold;">
+                    <i class="fa-solid fa-gift"></i> REGALAR GEMAS A ${targetUsername.toUpperCase()}
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <input type="number" id="gift-gems-amount" min="1" max="${state.points}" placeholder="Cantidad (tienes ${state.points})..." style="flex: 1; padding: 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); background: rgba(0,0,0,0.2); color: #fff; font-size: 0.85rem; font-family: var(--font);">
+                    <button onclick="giftGemsToUser('${targetUsername.replace(/'/g, "\\'")}')" class="btn-mc btn-purple-mc" style="margin: 0; padding: 8px 12px; font-size: 0.85rem; border-radius: 6px; font-family: var(--font);">Regalar</button>
+                </div>
+            </div>
+            ` : ''}
         </div>
     `;
+}
+
+// Helper to gift gems
+async function giftGemsToUser(targetUsername) {
+    if (!state.username || state.username === 'Invitado') {
+        showToast('⚠️ Debes iniciar sesión para regalar gemas.');
+        return;
+    }
+    const input = document.getElementById('gift-gems-amount');
+    if (!input) return;
+    const amount = parseInt(input.value, 10);
+    if (isNaN(amount) || amount <= 0) {
+        showToast('⚠️ Ingresa una cantidad válida de gemas.');
+        return;
+    }
+    if (state.points < amount) {
+        showToast('⚠️ No tienes suficientes gemas.');
+        return;
+    }
+
+    showToast('⏳ Procesando regalo...');
+
+    if (supabaseClient) {
+        try {
+            const targetLower = targetUsername.toLowerCase();
+            
+            // 1. Fetch target user's current points in Supabase user_profiles
+            const { data: profData, error: profErr } = await supabaseClient
+                .from('user_profiles')
+                .select('*')
+                .eq('username', targetUsername);
+            
+            let targetPoints = 0;
+            let targetUnlockedFrames = [];
+            let targetActiveFrame = '';
+            let targetLastSpinTime = '0';
+            let userProfileExists = false;
+
+            if (profData && profData.length > 0) {
+                const prof = profData[0];
+                targetPoints = parseInt(prof.points, 10) || 0;
+                targetActiveFrame = prof.active_frame || '';
+                targetLastSpinTime = prof.last_spin_time || '0';
+                try {
+                    targetUnlockedFrames = typeof prof.unlocked_frames === 'string' ? JSON.parse(prof.unlocked_frames) : (prof.unlocked_frames || []);
+                } catch(e) {}
+                userProfileExists = true;
+            }
+
+            // 2. Fetch from conversations table registration backup too
+            const { data: regData } = await supabaseClient
+                .from('conversations')
+                .select('*')
+                .eq('listing_id', 'registration')
+                .eq('buyer', targetLower);
+
+            let regRow = null;
+            let regMessages = [];
+            if (regData && regData.length > 0) {
+                regRow = regData[0];
+                regMessages = regRow.messages || [];
+                const msgGems = regMessages.find(m => m.startsWith('gems:'));
+                if (msgGems && !userProfileExists) {
+                    targetPoints = parseInt(msgGems.replace('gems:', ''), 10) || 0;
+                }
+            }
+
+            const newTargetPoints = targetPoints + amount;
+
+            // 3. Update target user_profiles in Supabase
+            const { error: updErr } = await supabaseClient
+                .from('user_profiles')
+                .upsert({
+                    username: targetUsername,
+                    points: newTargetPoints,
+                    active_frame: targetActiveFrame,
+                    unlocked_frames: JSON.stringify(targetUnlockedFrames),
+                    last_spin_time: targetLastSpinTime
+                }, { onConflict: 'username' });
+
+            if (updErr) throw updErr;
+
+            // 4. Update target conversations table backup in Supabase
+            if (regRow) {
+                let updatedMessages = regMessages.filter(m => !m.startsWith('gems:'));
+                updatedMessages.push('gems:' + newTargetPoints);
+                
+                await supabaseClient
+                    .from('conversations')
+                    .update({ messages: updatedMessages })
+                    .eq('id', regRow.id);
+            }
+
+            // 5. Deduct points from sender locally and in Supabase
+            state.points -= amount;
+            saveUserDataToStorage(false);
+            syncUser();
+
+            // 6. Send a simulated direct chat message
+            await sendSimulatedSystemMessage(targetUsername, `🎁 ¡Hola! Te he regalado ${amount} Gemas. Disfrútalas.`);
+
+            // 7. Register activity
+            pushMarketActivity(`<strong>${state.username}</strong> le regaló <strong>${amount} Gemas</strong> a <strong>${targetUsername}</strong>`, 'fa-solid fa-gift', '#fbbf24');
+
+            showToast(`🎉 ¡Le has regalado ${amount} Gemas a ${targetUsername}!`);
+            input.value = '';
+            
+            // Refresh profile modal
+            renderOtherUserProfile(targetUsername);
+
+        } catch (e) {
+            console.error("Error gifting gems:", e);
+            showToast('❌ Error de conexión al regalar gemas.');
+        }
+    } else {
+        // Fallback local simulation
+        state.points -= amount;
+        saveUserDataToStorage(true);
+        syncUser();
+        showToast(`🎉 (Simulado) Regalo de ${amount} Gemas enviado.`);
+        input.value = '';
+        renderOtherUserProfile(targetUsername);
+    }
+}
+
+// Helper to send simulated chat message
+async function sendSimulatedSystemMessage(targetUsername, text) {
+    const u1 = state.username.toLowerCase();
+    const u2 = targetUsername.toLowerCase();
+    const sorted = [u1, u2].sort();
+    const friendId = `friend_${sorted[0]}_${sorted[1]}`;
+    
+    let conv = state.conversations.find(c => c.id === friendId);
+    let messages = [];
+    if (conv) {
+        messages = [...conv.messages, {
+            sender: state.username,
+            text: text,
+            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+        }];
+        conv.messages = messages;
+        if (supabaseClient) {
+            await supabaseClient.from('conversations').update({ messages, updated_at: new Date() }).eq('id', conv.id);
+        }
+    } else {
+        const newConv = {
+            id: friendId,
+            listingId: 'friendship',
+            buyer: state.username,
+            seller: targetUsername,
+            status: 'accepted',
+            messages: [{
+                sender: state.username,
+                text: text,
+                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+            }]
+        };
+        state.conversations.push(newConv);
+        if (supabaseClient) {
+            await supabaseClient.from('conversations').insert([{
+                id: newConv.id,
+                listing_id: 'friendship',
+                buyer: newConv.buyer,
+                seller: newConv.seller,
+                status: newConv.status,
+                messages: newConv.messages
+            }]);
+        }
+    }
+    localStorage.setItem('obs_conversations', JSON.stringify(state.conversations));
 }
 
 // Social Panel View & Search
@@ -3792,9 +3973,16 @@ function renderClanDetailsPanel() {
                 <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px; color: #a855f7; font-weight: bold; font-size: 0.95rem;">
                     <i class="fa-solid fa-scroll"></i> Manifiesto & Objetivos del Clan
                 </div>
-                <p style="color: #cfc2d6; font-size: 0.88rem; line-height: 1.5; margin: 0;">
+                <p style="color: #cfc2d6; font-size: 0.88rem; line-height: 1.5; margin: 0; margin-bottom: 8px;">
                     ${factionData.description || 'El líder del clan no ha configurado una descripción en el manifiesto.'}
                 </p>
+                ${factionData.discord ? `
+                <div style="margin-top: 8px;">
+                    <a href="${factionData.discord}" target="_blank" class="btn-mc btn-purple-mc width-100" style="text-decoration: none; padding: 8px; text-align: center; font-size: 0.82rem; display: flex; align-items: center; justify-content: center; gap: 6px; border-radius: 8px; font-family: var(--font);">
+                        <i class="fa-brands fa-discord"></i> UNIRSE AL DISCORD DEL CLAN
+                    </a>
+                </div>
+                ` : ''}
             </div>
             <div style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 10px; display: flex; justify-content: flex-end;">
                 <button onclick="confirmLeaveClan()" class="btn-mc btn-dark-mc" style="margin: 0; padding: 6px 14px; font-size: 0.78rem; border-color: #f87171; color: #f87171; border-radius: 8px; display: flex; align-items: center; gap: 6px;">
@@ -4424,6 +4612,18 @@ function openFactionDetailModal(factionId) {
         }
     }
 
+    let showDiscord = false;
+    if (data.discord) {
+        if (recruitment === 'Abierto') {
+            showDiscord = true;
+        } else {
+            const isMember = currentFaction && currentFaction.faction.id === item.id;
+            if (canManage || isMember) {
+                showDiscord = true;
+            }
+        }
+    }
+
     detailContainer.innerHTML = `
         <div class="fd-banner" style="background-image: url('${bannerUrl}')">
             <div class="fd-banner-overlay"></div>
@@ -4464,7 +4664,7 @@ function openFactionDetailModal(factionId) {
                         </div>
                     </div>
                     
-                    ${data.discord ? `
+                    ${showDiscord ? `
                     <a href="${data.discord}" target="_blank" class="btn-mc btn-purple-mc width-100" style="margin-top: 1rem; text-decoration: none; padding: 0.6rem; text-align: center;">
                         <i class="fa-brands fa-discord"></i> DISCORD DEL CLAN
                     </a>
@@ -5220,22 +5420,47 @@ function onProfileImageUpload(event) {
         showToast('⚠️ La imagen no debe superar los 2 MB.');
         return;
     }
+    
+    showToast('⏳ Procesando y optimizando imagen...');
     const nameEl = document.getElementById('prf-file-name');
     if (nameEl) nameEl.textContent = file.name;
 
     const reader = new FileReader();
     reader.onload = (e) => {
-        state.customAvatar = e.target.result;
-        state.avatarSource = 'custom';
-        localStorage.setItem('obs_custom_avatar', state.customAvatar);
-        localStorage.setItem('obs_avatar_source', 'custom');
-        const radios = document.querySelectorAll('input[name="avatar-source"]');
-        radios.forEach(r => { r.checked = (r.value === 'custom'); });
-        renderProfileAvatarPreview(state.username, true);
-        syncUser();
-        renderMarketListings();
-        saveUserDataToStorage(false);
-        showToast('🖼️ Foto personalizada guardada');
+        const img = new Image();
+        img.onload = () => {
+            // Resize to 96x96 px to optimize payload for Supabase and fast rendering
+            const canvas = document.createElement('canvas');
+            const maxDim = 96;
+            canvas.width = maxDim;
+            canvas.height = maxDim;
+            const ctx = canvas.getContext('2d');
+            
+            // Crop center square
+            const minSize = Math.min(img.width, img.height);
+            const sx = (img.width - minSize) / 2;
+            const sy = (img.height - minSize) / 2;
+            
+            ctx.drawImage(img, sx, sy, minSize, minSize, 0, 0, maxDim, maxDim);
+            
+            // Output small compressed JPEG data url
+            const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+            
+            state.customAvatar = compressedBase64;
+            state.avatarSource = 'custom';
+            localStorage.setItem('obs_custom_avatar', state.customAvatar);
+            localStorage.setItem('obs_avatar_source', 'custom');
+            
+            const radios = document.querySelectorAll('input[name="avatar-source"]');
+            radios.forEach(r => { r.checked = (r.value === 'custom'); });
+            
+            renderProfileAvatarPreview(state.username, true);
+            syncUser();
+            renderMarketListings();
+            saveUserDataToStorage(false);
+            showToast('🖼️ Foto personalizada guardada y optimizada');
+        };
+        img.src = e.target.result;
     };
     reader.readAsDataURL(file);
 }
